@@ -1,25 +1,27 @@
-# Run: dart run flutter_native_splash:create --path=flutter_native_splash.yaml
+# Run:
+# dart run flutter_native_splash:create --path=flutter_native_splash.yaml
+
 flutter_native_splash:
-  
-  # Light Mode Configuration
+
+  # Main Splash
   color: "#FFFFFF"
-  image: assets/icons/icon_splash.png
-  
-  # Dark Mode Configuration
+  image: assets/images/icon_splash.png
+
+  # Dark Mode
   color_dark: "#000000"
-  image_dark: assets/icons/icon_splash.png
-  
-  # Platform Support
+  image_dark: assets/images/icon_splash.png
+
+  # Platforms
   android: true
   ios: false
-  macos: false
-  linux: false
-  windows: false
-  web: false
-  
-  # Android 12+ Specific Configuration
+
+  # Fullscreen
+  fullscreen: true
+
+  # Android 12+
   android_12:
     color: "#FFFFFF"
-    image: assets/icons/icon_splash_padded.png
+    image: assets/images/icon_splash_padded.png
+
     color_dark: "#000000"
-    image_dark: assets/icons/icon_splash_padded.png
+    image_dark: assets/images/icon_splash_padded.png
