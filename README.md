@@ -16,9 +16,9 @@ MindMate is a **Flutter-based Voice User Interface (VUI) application** designed 
 |---|---|---|
 | 😴 CT 2020/012 | **Herman P.H.S.L** | Sleep hygiene tips & bedtime routines |
 | 😊 CT 2020/027 | **Kumara. J.A.C.D.** | Mood tracking & daily emotional check-ins |
-| 🧘 CT 2020/046 | **Eranda** | Mindfulness & meditation guidance |
+| 🧘 CT 2020/046 | **Dangampola E.R** | Mindfulness & meditation guidance |
 | 🆘 CT 2020/075 | **Channa** | Professional help & emergency contacts |
-| 🫁 CT 2020/086 | **G.K.W.Jayawickrama** | Breathing exercises & guided relaxation |
+| 🫁 CT 2020/086 | **Jayawickrama G.K.W.** | Breathing exercises & guided relaxation |
 
 ## 📚 Course & Assignment
 
