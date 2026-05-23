@@ -6,6 +6,10 @@
     <true/>
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>MindMate uses speech recognition so you can navigate by voice.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>MindMate needs the microphone to listen to your voice commands.</string>
     <key>CFBundleDisplayName</key>
     <string>Mind Mate</string>
     <key>CFBundleExecutable</key>

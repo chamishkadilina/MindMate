@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mindmate/home_page.dart';
+import 'home_page.dart';
 
 void main() {
   runApp(const MindMateApp());
@@ -11,8 +11,16 @@ class MindMateApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: const HomePage(),
+      title: 'MindMate',
       debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF6C63FF),
+          brightness: Brightness.light,
+        ),
+        useMaterial3: true,
+      ),
+      home: const HomePage(),
     );
   }
 }
