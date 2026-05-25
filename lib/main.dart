@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'home_page.dart';
 
 void main() {
-  runApp(const MindMateApp());
+  runApp(const ProviderScope(child: MindMateApp()));
 }
 
 class MindMateApp extends StatelessWidget {

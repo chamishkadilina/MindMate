@@ -5,6 +5,10 @@ import 'package:mindmate/features/breathing_exercises/screens/breathing_exercise
 import 'package:mindmate/features/emergency_support/screens/emergency_support_page.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
+import 'features/mindfulness/screens/mindfulness_page.dart';
+import 'features/mood_tracking/screens/mood_tracking_page.dart';
+import 'features/sleep_hygiene/screens/sleep_vui_screen.dart';
+
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -21,6 +25,7 @@ class _HomePageState extends State<HomePage>
   // ── State ─────────────────────────────────────────────────────────────────
   bool _isListening = false;
   bool _sttAvailable = false;
+  bool _isNavigating = false;
   String _recognizedText = '';
   String _statusLabel = 'Tap the mic and speak';
 
@@ -135,6 +140,9 @@ class _HomePageState extends State<HomePage>
   }
 
   Future<void> _stopListening() async {
+    if (_isNavigating) return;
+    _isNavigating = true;
+
     await _stt.stop();
     _pulseController.stop();
     _pulseController.reset();
@@ -147,6 +155,7 @@ class _HomePageState extends State<HomePage>
     }
 
     await _navigate(_recognizedText.toLowerCase());
+    _isNavigating = false;
   }
 
   // ── Intent matching & navigation ──────────────────────────────────────────
@@ -159,17 +168,34 @@ class _HomePageState extends State<HomePage>
 
     final isBreathing =
         text.contains('breath') ||
-        text.contains('breathing') ||
-        text.contains('relax') ||
-        text.contains('calm') ||
-        text.contains('exercise');
+            text.contains('relax') ||
+            text.contains('calm') ||
+            text.contains('exercise');
 
     final isEmergency =
         text.contains('emergency') ||
-        text.contains('help') ||
-        text.contains('crisis') ||
-        text.contains('urgent') ||
-        text.contains('support');
+            text.contains('crisis') ||
+            text.contains('urgent') ||
+            text.contains('support');
+
+    final isSleep =
+        text.contains('sleep') ||
+            text.contains('rest') ||
+            text.contains('bedtime') ||
+            text.contains('hygiene') ||
+            text.contains('insomnia');
+
+    final isMindfulness =
+        text.contains('mindful') ||
+            text.contains('meditat') ||
+            text.contains('aware') ||
+            text.contains('present');
+
+    final isMood =
+        text.contains('mood') ||
+            text.contains('feeling') ||
+            text.contains('emotion') ||
+            text.contains('track');
 
     if (isBreathing) {
       setState(() => _statusLabel = 'Going to Breathing Exercises…');
@@ -179,7 +205,6 @@ class _HomePageState extends State<HomePage>
           context,
           MaterialPageRoute(builder: (_) => const BreathingExercisesPage()),
         );
-        // Speak when returning to home
         await _speak('You are back on the home page.');
         if (mounted) setState(() => _statusLabel = 'Tap the mic and speak');
       }
@@ -194,14 +219,47 @@ class _HomePageState extends State<HomePage>
         await _speak('You are back on the home page.');
         if (mounted) setState(() => _statusLabel = 'Tap the mic and speak');
       }
+    } else if (isSleep) {
+      setState(() => _statusLabel = 'Going to Sleep Hygiene…');
+      await _speak('Opening Sleep Hygiene.');
+      if (mounted) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const SleepVuiScreen()),
+        );
+        await _speak('You are back on the home page.');
+        if (mounted) setState(() => _statusLabel = 'Tap the mic and speak');
+      }
+    } else if (isMindfulness) {
+      setState(() => _statusLabel = 'Going to Mindfulness…');
+      await _speak('Opening Mindfulness.');
+      if (mounted) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const MindfulnessPage()),
+        );
+        await _speak('You are back on the home page.');
+        if (mounted) setState(() => _statusLabel = 'Tap the mic and speak');
+      }
+    } else if (isMood) {
+      setState(() => _statusLabel = 'Going to Mood Tracking…');
+      await _speak('Opening Mood Tracking.');
+      if (mounted) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const MoodTrackingPage()),
+        );
+        await _speak('You are back on the home page.');
+        if (mounted) setState(() => _statusLabel = 'Tap the mic and speak');
+      }
     } else {
       setState(
-        () => _statusLabel =
-            'Not sure where to go. Try "Emergency" or "Breathing".',
+            () => _statusLabel = 'Not sure where to go. Try a module name.',
       );
       await _speak(
         'I heard "$_recognizedText" but I\'m not sure where to navigate. '
-        'Try saying Emergency Support or Breathing Exercises.',
+            'Try saying Breathing Exercises, Sleep Hygiene, Mindfulness, '
+            'Mood Tracking, or Emergency Support.',
       );
     }
   }
@@ -225,162 +283,217 @@ class _HomePageState extends State<HomePage>
       body: SafeArea(
         child: Column(
           children: [
-            // ── Header ───────────────────────────────────────────────────
+            // ── Scrollable top section ──────────────────────────
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header
+                    Text(
+                      'MindMate',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Your voice-guided companion',
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+
+                    const SizedBox(height: 28),
+
+                    // Nav cards
+                    Row(
+                      children: [
+                        _NavCard(
+                          icon: Icons.air,
+                          label: 'Breathing\nExercises',
+                          color: const Color(0xFF4CAF82),
+                          onTap: () async {
+                            await _speak('Opening Breathing Exercises.');
+                            if (mounted) {
+                              await Navigator.push(context,
+                                  MaterialPageRoute(builder: (_) => const BreathingExercisesPage()));
+                              await _speak('You are back on the home page.');
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 14),
+                        _NavCard(
+                          icon: Icons.local_hospital_rounded,
+                          label: 'Emergency\nSupport',
+                          color: const Color(0xFFE05C5C),
+                          onTap: () async {
+                            await _speak('Opening Emergency Support.');
+                            if (mounted) {
+                              await Navigator.push(context,
+                                  MaterialPageRoute(builder: (_) => const EmergencySupportPage()));
+                              await _speak('You are back on the home page.');
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        _NavCard(
+                          icon: Icons.bedtime_rounded,
+                          label: 'Sleep\nHygiene',
+                          color: const Color(0xFF2196F3),
+                          onTap: () async {
+                            await _speak('Opening Sleep Hygiene.');
+                            if (mounted) {
+                              await Navigator.push(context,
+                                  MaterialPageRoute(builder: (_) => const SleepVuiScreen()));
+                              await _speak('You are back on the home page.');
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 14),
+                        _NavCard(
+                          icon: Icons.self_improvement_rounded,
+                          label: 'Mindfulness',
+                          color: const Color(0xFF9C6FDE),
+                          onTap: () async {
+                            await _speak('Opening Mindfulness.');
+                            if (mounted) {
+                              await Navigator.push(context,
+                                  MaterialPageRoute(builder: (_) => const MindfulnessPage()));
+                              await _speak('You are back on the home page.');
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        _NavCard(
+                          icon: Icons.mood_rounded,
+                          label: 'Mood\nTracking',
+                          color: const Color(0xFF6C63FF),
+                          onTap: () async {
+                            await _speak('Opening Mood Tracking.');
+                            if (mounted) {
+                              await Navigator.push(context,
+                                  MaterialPageRoute(builder: (_) => const MoodTrackingPage()));
+                              await _speak('You are back on the home page.');
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 14),
+                        const Expanded(child: SizedBox()),
+                      ],
+                    ),
+
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Fixed bottom mic section ────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    'MindMate',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.primary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Your voice-guided companion',
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // ── Quick-nav cards ──────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
-              child: Row(
-                children: [
-                  _NavCard(
-                    icon: Icons.air,
-                    label: 'Breathing\nExercises',
-                    color: const Color(0xFF4CAF82),
-                    onTap: () async {
-                      await _speak('Opening Breathing Exercises.');
-                      if (mounted) {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const BreathingExercisesPage(),
-                          ),
-                        );
-                        await _speak('You are back on the home page.');
-                      }
-                    },
-                  ),
-                  const SizedBox(width: 14),
-                  _NavCard(
-                    icon: Icons.local_hospital_rounded,
-                    label: 'Emergency\nSupport',
-                    color: const Color(0xFFE05C5C),
-                    onTap: () async {
-                      await _speak('Opening Emergency Support.');
-                      if (mounted) {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const EmergencySupportPage(),
-                          ),
-                        );
-                        await _speak('You are back on the home page.');
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ),
-
-            // ── Centre mic area ──────────────────────────────────────────
-            const Spacer(),
-
-            // Recognized text
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              child: _recognizedText.isNotEmpty
-                  ? Padding(
+                  // Recognized text
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    child: _recognizedText.isNotEmpty
+                        ? Padding(
                       key: const ValueKey('text'),
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
                       child: Text(
                         '"$_recognizedText"',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: 15,
                           fontStyle: FontStyle.italic,
                           color: colorScheme.onSurfaceVariant,
                         ),
                       ),
                     )
-                  : const SizedBox(key: ValueKey('empty')),
-            ),
+                        : const SizedBox(key: ValueKey('empty')),
+                  ),
 
-            const SizedBox(height: 20),
+                  const SizedBox(height: 16),
 
-            // Pulsing mic button
-            ScaleTransition(
-              scale: _pulseAnim,
-              child: GestureDetector(
-                onTap: _onMicTap,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  width: 110,
-                  height: 110,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _isListening
-                        ? colorScheme.error
-                        : colorScheme.primary,
-                    boxShadow: [
-                      BoxShadow(
-                        color:
-                            (_isListening
-                                    ? colorScheme.error
-                                    : colorScheme.primary)
-                                .withOpacity(0.35),
-                        blurRadius: 28,
-                        spreadRadius: 4,
+                  // Pulsing mic button
+                  ScaleTransition(
+                    scale: _pulseAnim,
+                    child: GestureDetector(
+                      onTap: _onMicTap,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        width: 100,
+                        height: 100,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _isListening
+                              ? colorScheme.error
+                              : colorScheme.primary,
+                          boxShadow: [
+                            BoxShadow(
+                              color: (_isListening
+                                  ? colorScheme.error
+                                  : colorScheme.primary)
+                                  .withOpacity(0.35),
+                              blurRadius: 24,
+                              spreadRadius: 4,
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          _isListening ? Icons.stop_rounded : Icons.mic_rounded,
+                          size: 46,
+                          color: Colors.white,
+                        ),
                       ),
-                    ],
+                    ),
                   ),
-                  child: Icon(
-                    _isListening ? Icons.stop_rounded : Icons.mic_rounded,
-                    size: 52,
-                    color: Colors.white,
+
+                  const SizedBox(height: 12),
+
+                  // Status label
+                  Text(
+                    _statusLabel,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                ),
-              ),
-            ),
 
-            const SizedBox(height: 20),
+                  const SizedBox(height: 10),
 
-            // Status label
-            Text(
-              _statusLabel,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // Hint chips
-            if (!_isListening)
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                children: [
-                  _HintChip(label: '"Go to Emergency"'),
-                  _HintChip(label: '"Breathing Exercises"'),
+                  // Hint chips
+                  if (!_isListening)
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: const [
+                        _HintChip(label: '"Breathing"'),
+                        _HintChip(label: '"Emergency"'),
+                        _HintChip(label: '"Sleep"'),
+                        _HintChip(label: '"Mindfulness"'),
+                        _HintChip(label: '"Mood"'),
+                      ],
+                    ),
                 ],
               ),
-
-            const Spacer(),
+            ),
           ],
         ),
       ),
