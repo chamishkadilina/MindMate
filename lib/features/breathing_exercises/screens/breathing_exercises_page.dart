@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mindmate/features/sleep_hygiene/services/tts_service.dart';
+import 'package:mindmate/core/services/tts_service.dart';
 
 class BreathingExercisesPage extends StatefulWidget {
   const BreathingExercisesPage({super.key});
@@ -87,7 +87,6 @@ class _BreathingExercisesPageState extends State<BreathingExercisesPage>
   @override
   void dispose() {
     _circleController.dispose();
-    _tts.dispose();
     super.dispose();
   }
 

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mindmate/features/sleep_hygiene/services/tts_service.dart';
+import 'package:mindmate/core/services/tts_service.dart';
 
 class MoodTrackingPage extends StatefulWidget {
   const MoodTrackingPage({super.key});
@@ -69,7 +69,6 @@ class _MoodTrackingPageState extends State<MoodTrackingPage> {
 
   @override
   void dispose() {
-    _tts.dispose();
     super.dispose();
   }
 

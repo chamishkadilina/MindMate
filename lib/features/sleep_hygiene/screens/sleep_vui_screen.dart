@@ -7,7 +7,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import '../../../core/constants/sleep_content.dart';
 import '../services/sleep_engine.dart';
 
@@ -69,6 +68,13 @@ class _SleepVuiScreenState extends ConsumerState<SleepVuiScreen>
 
     // Side effects
     ref.listen<SleepVuiState>(sleepVuiNotifierProvider, (prev, next) {
+
+      // Exit on voice command
+      if (next.isExiting && !(prev?.isExiting ?? false)) {
+        Navigator.of(context).pop();
+        return;
+      }
+
       // Navigation
       if (next.pendingRoute != null) {
         notifier.clearPendingRoute();
