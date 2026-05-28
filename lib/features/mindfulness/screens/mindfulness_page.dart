@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_tts/flutter_tts.dart';
+import 'package:mindmate/features/sleep_hygiene/services/tts_service.dart';
 
 class MindfulnessPage extends StatefulWidget {
   const MindfulnessPage({super.key});
@@ -9,7 +9,7 @@ class MindfulnessPage extends StatefulWidget {
 }
 
 class _MindfulnessPageState extends State<MindfulnessPage> {
-  final FlutterTts _tts = FlutterTts();
+  final TtsService _tts = TtsService();
   bool _isPlaying = false;
   String _sessionLabel = 'Tap a session to begin';
 
@@ -59,10 +59,7 @@ class _MindfulnessPageState extends State<MindfulnessPage> {
   }
 
   Future<void> _initTts() async {
-    await _tts.setLanguage('en-US');
-    await _tts.setSpeechRate(0.45);
-    await _tts.setVolume(1.0);
-
+    await _tts.initialise();
     await Future.delayed(const Duration(milliseconds: 300));
     await _tts.speak(
       'You are in the Mindfulness page. Choose a session to begin your practice.',
@@ -93,7 +90,7 @@ class _MindfulnessPageState extends State<MindfulnessPage> {
 
   @override
   void dispose() {
-    _tts.stop();
+    _tts.dispose();
     super.dispose();
   }
 
@@ -115,42 +112,27 @@ class _MindfulnessPageState extends State<MindfulnessPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Banner ───────────────────────────────────────────────────
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [
-                    accent.withOpacity(0.85),
-                    accent.withOpacity(0.50),
-                  ],
+                  colors: [accent.withOpacity(0.85), accent.withOpacity(0.50)],
                 ),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '🧘  Be here, now',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
+                  Text('🧘  Be here, now',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
                   SizedBox(height: 6),
-                  Text(
-                    'A few mindful minutes can reset your entire day.',
-                    style: TextStyle(color: Colors.white, fontSize: 13, height: 1.4),
-                  ),
+                  Text('A few mindful minutes can reset your entire day.',
+                      style: TextStyle(color: Colors.white, fontSize: 13, height: 1.4)),
                 ],
               ),
             ),
-
             const SizedBox(height: 28),
-
-            // ── Guided session player ────────────────────────────────────
             Center(
               child: Column(
                 children: [
@@ -162,52 +144,30 @@ class _MindfulnessPageState extends State<MindfulnessPage> {
                       shape: BoxShape.circle,
                       color: accent.withOpacity(_isPlaying ? 0.25 : 0.12),
                       border: Border.all(
-                        color: accent.withOpacity(_isPlaying ? 0.7 : 0.3),
-                        width: 2,
-                      ),
+                          color: accent.withOpacity(_isPlaying ? 0.7 : 0.3), width: 2),
                     ),
-                    child: Icon(
-                      Icons.self_improvement_rounded,
-                      size: 64,
-                      color: accent.withOpacity(_isPlaying ? 1.0 : 0.6),
-                    ),
+                    child: Icon(Icons.self_improvement_rounded,
+                        size: 64, color: accent.withOpacity(_isPlaying ? 1.0 : 0.6)),
                   ),
                   const SizedBox(height: 12),
-                  Text(
-                    _sessionLabel,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: cs.onSurfaceVariant,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
+                  Text(_sessionLabel,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 14, color: cs.onSurfaceVariant, fontStyle: FontStyle.italic)),
                   const SizedBox(height: 14),
                   FilledButton.icon(
                     onPressed: _isPlaying ? null : _runBodyScan,
-                    icon: Icon(_isPlaying
-                        ? Icons.hourglass_top_rounded
-                        : Icons.play_arrow_rounded),
+                    icon: Icon(_isPlaying ? Icons.hourglass_top_rounded : Icons.play_arrow_rounded),
                     label: Text(_isPlaying ? 'Playing…' : 'Start Body Scan'),
                     style: FilledButton.styleFrom(backgroundColor: accent),
                   ),
                 ],
               ),
             ),
-
             const SizedBox(height: 32),
-
-            Text(
-              'All Sessions',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: cs.onSurface,
-              ),
-            ),
+            Text('All Sessions',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: cs.onSurface)),
             const SizedBox(height: 12),
-
-            // ── Session cards ────────────────────────────────────────────
             ...List.generate(_sessions.length, (i) {
               final s = _sessions[i];
               return Container(
@@ -241,16 +201,10 @@ class _MindfulnessPageState extends State<MindfulnessPage> {
                 ),
               );
             }),
-
             const SizedBox(height: 28),
-
-            Text(
-              'Mindfulness Tips',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: cs.onSurface),
-            ),
+            Text('Mindfulness Tips',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: cs.onSurface)),
             const SizedBox(height: 12),
-
-            // ── Tips ─────────────────────────────────────────────────────
             ...List.generate(_tips.length, (i) {
               final t = _tips[i];
               return Container(
@@ -273,8 +227,7 @@ class _MindfulnessPageState extends State<MindfulnessPage> {
                               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                           const SizedBox(height: 3),
                           Text(t['body']!,
-                              style: TextStyle(
-                                  fontSize: 13, color: cs.onSurfaceVariant, height: 1.4)),
+                              style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant, height: 1.4)),
                         ],
                       ),
                     ),

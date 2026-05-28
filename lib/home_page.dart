@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_tts/flutter_tts.dart';
+import 'package:mindmate/features/sleep_hygiene/services/tts_service.dart';
 import 'package:mindmate/features/breathing_exercises/screens/breathing_exercises_page.dart';
 import 'package:mindmate/features/emergency_support/screens/emergency_support_page.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
@@ -19,7 +19,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage>
     with SingleTickerProviderStateMixin {
   // ── Services ──────────────────────────────────────────────────────────────
-  final FlutterTts _tts = FlutterTts();
+  final TtsService _tts = TtsService();
   final stt.SpeechToText _stt = stt.SpeechToText();
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -38,7 +38,6 @@ class _HomePageState extends State<HomePage>
   void initState() {
     super.initState();
 
-    // Pulse animation (only plays while listening)
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
@@ -53,14 +52,9 @@ class _HomePageState extends State<HomePage>
 
   // ── TTS setup & welcome ───────────────────────────────────────────────────
   Future<void> _initTts() async {
-    await _tts.setLanguage('en-US');
-    await _tts.setSpeechRate(0.48);
-    await _tts.setVolume(1.0);
-    await _tts.setPitch(1.0);
-
-    // Brief delay so the screen is ready before speaking
+    await _tts.initialise();
     await Future.delayed(const Duration(milliseconds: 600));
-    await _speak(
+    await _tts.speak(
       'Welcome to MindMate. Tap the microphone and tell me where you want to go.',
     );
   }
@@ -81,7 +75,6 @@ class _HomePageState extends State<HomePage>
       },
       onStatus: (status) {
         debugPrint('STT status: $status');
-        // speech_to_text stops automatically after a pause; sync our state
         if (status == 'done' || status == 'notListening') {
           if (_isListening && mounted) {
             _stopListening();
@@ -91,12 +84,6 @@ class _HomePageState extends State<HomePage>
     );
 
     if (mounted) setState(() {});
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  Future<void> _speak(String text) async {
-    await _tts.stop();
-    await _tts.speak(text);
   }
 
   // ── Mic button handler ────────────────────────────────────────────────────
@@ -110,11 +97,11 @@ class _HomePageState extends State<HomePage>
 
   Future<void> _startListening() async {
     if (!_sttAvailable) {
-      await _speak('Speech recognition is not available on this device.');
+      await _tts.speak('Speech recognition is not available on this device.');
       return;
     }
 
-    await _tts.stop(); // stop any ongoing TTS before listening
+    await _tts.stop();
     setState(() {
       _isListening = true;
       _recognizedText = '';
@@ -162,7 +149,7 @@ class _HomePageState extends State<HomePage>
   Future<void> _navigate(String text) async {
     if (text.isEmpty) {
       setState(() => _statusLabel = 'I didn\'t catch that. Try again.');
-      await _speak('I didn\'t catch that. Please try again.');
+      await _tts.speak('I didn\'t catch that. Please try again.');
       return;
     }
 
@@ -199,64 +186,52 @@ class _HomePageState extends State<HomePage>
 
     if (isBreathing) {
       setState(() => _statusLabel = 'Going to Breathing Exercises…');
-      await _speak('Opening Breathing Exercises.');
+      await _tts.speak('Opening Breathing Exercises.');
       if (mounted) {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const BreathingExercisesPage()),
-        );
-        await _speak('You are back on the home page.');
+        await Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const BreathingExercisesPage()));
+        await _tts.speak('You are back on the home page.');
         if (mounted) setState(() => _statusLabel = 'Tap the mic and speak');
       }
     } else if (isEmergency) {
       setState(() => _statusLabel = 'Going to Emergency Support…');
-      await _speak('Opening Emergency Support.');
+      await _tts.speak('Opening Emergency Support.');
       if (mounted) {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const EmergencySupportPage()),
-        );
-        await _speak('You are back on the home page.');
+        await Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const EmergencySupportPage()));
+        await _tts.speak('You are back on the home page.');
         if (mounted) setState(() => _statusLabel = 'Tap the mic and speak');
       }
     } else if (isSleep) {
       setState(() => _statusLabel = 'Going to Sleep Hygiene…');
-      await _speak('Opening Sleep Hygiene.');
+      await _tts.speak('Opening Sleep Hygiene.');
       if (mounted) {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const SleepVuiScreen()),
-        );
-        await _speak('You are back on the home page.');
+        await Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const SleepVuiScreen()));
+        await _tts.speak('You are back on the home page.');
         if (mounted) setState(() => _statusLabel = 'Tap the mic and speak');
       }
     } else if (isMindfulness) {
       setState(() => _statusLabel = 'Going to Mindfulness…');
-      await _speak('Opening Mindfulness.');
+      await _tts.speak('Opening Mindfulness.');
       if (mounted) {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const MindfulnessPage()),
-        );
-        await _speak('You are back on the home page.');
+        await Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const MindfulnessPage()));
+        await _tts.speak('You are back on the home page.');
         if (mounted) setState(() => _statusLabel = 'Tap the mic and speak');
       }
     } else if (isMood) {
       setState(() => _statusLabel = 'Going to Mood Tracking…');
-      await _speak('Opening Mood Tracking.');
+      await _tts.speak('Opening Mood Tracking.');
       if (mounted) {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const MoodTrackingPage()),
-        );
-        await _speak('You are back on the home page.');
+        await Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const MoodTrackingPage()));
+        await _tts.speak('You are back on the home page.');
         if (mounted) setState(() => _statusLabel = 'Tap the mic and speak');
       }
     } else {
-      setState(
-            () => _statusLabel = 'Not sure where to go. Try a module name.',
-      );
-      await _speak(
+      setState(() => _statusLabel = 'Not sure where to go. Try a module name.');
+      await _tts.speak(
         'I heard "$_recognizedText" but I\'m not sure where to navigate. '
             'Try saying Breathing Exercises, Sleep Hygiene, Mindfulness, '
             'Mood Tracking, or Emergency Support.',
@@ -268,7 +243,7 @@ class _HomePageState extends State<HomePage>
   @override
   void dispose() {
     _pulseController.dispose();
-    _tts.stop();
+    _tts.dispose();
     _stt.stop();
     super.dispose();
   }
@@ -283,14 +258,12 @@ class _HomePageState extends State<HomePage>
       body: SafeArea(
         child: Column(
           children: [
-            // ── Scrollable top section ──────────────────────────
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Header
                     Text(
                       'MindMate',
                       style: TextStyle(
@@ -307,10 +280,7 @@ class _HomePageState extends State<HomePage>
                         color: colorScheme.onSurfaceVariant,
                       ),
                     ),
-
                     const SizedBox(height: 28),
-
-                    // Nav cards
                     Row(
                       children: [
                         _NavCard(
@@ -318,11 +288,11 @@ class _HomePageState extends State<HomePage>
                           label: 'Breathing\nExercises',
                           color: const Color(0xFF4CAF82),
                           onTap: () async {
-                            await _speak('Opening Breathing Exercises.');
+                            await _tts.speak('Opening Breathing Exercises.');
                             if (mounted) {
                               await Navigator.push(context,
                                   MaterialPageRoute(builder: (_) => const BreathingExercisesPage()));
-                              await _speak('You are back on the home page.');
+                              await _tts.speak('You are back on the home page.');
                             }
                           },
                         ),
@@ -332,11 +302,11 @@ class _HomePageState extends State<HomePage>
                           label: 'Emergency\nSupport',
                           color: const Color(0xFFE05C5C),
                           onTap: () async {
-                            await _speak('Opening Emergency Support.');
+                            await _tts.speak('Opening Emergency Support.');
                             if (mounted) {
                               await Navigator.push(context,
                                   MaterialPageRoute(builder: (_) => const EmergencySupportPage()));
-                              await _speak('You are back on the home page.');
+                              await _tts.speak('You are back on the home page.');
                             }
                           },
                         ),
@@ -350,11 +320,11 @@ class _HomePageState extends State<HomePage>
                           label: 'Sleep\nHygiene',
                           color: const Color(0xFF2196F3),
                           onTap: () async {
-                            await _speak('Opening Sleep Hygiene.');
+                            await _tts.speak('Opening Sleep Hygiene.');
                             if (mounted) {
                               await Navigator.push(context,
                                   MaterialPageRoute(builder: (_) => const SleepVuiScreen()));
-                              await _speak('You are back on the home page.');
+                              await _tts.speak('You are back on the home page.');
                             }
                           },
                         ),
@@ -364,11 +334,11 @@ class _HomePageState extends State<HomePage>
                           label: 'Mindfulness',
                           color: const Color(0xFF9C6FDE),
                           onTap: () async {
-                            await _speak('Opening Mindfulness.');
+                            await _tts.speak('Opening Mindfulness.');
                             if (mounted) {
                               await Navigator.push(context,
                                   MaterialPageRoute(builder: (_) => const MindfulnessPage()));
-                              await _speak('You are back on the home page.');
+                              await _tts.speak('You are back on the home page.');
                             }
                           },
                         ),
@@ -382,11 +352,11 @@ class _HomePageState extends State<HomePage>
                           label: 'Mood\nTracking',
                           color: const Color(0xFF6C63FF),
                           onTap: () async {
-                            await _speak('Opening Mood Tracking.');
+                            await _tts.speak('Opening Mood Tracking.');
                             if (mounted) {
                               await Navigator.push(context,
                                   MaterialPageRoute(builder: (_) => const MoodTrackingPage()));
-                              await _speak('You are back on the home page.');
+                              await _tts.speak('You are back on the home page.');
                             }
                           },
                         ),
@@ -394,7 +364,6 @@ class _HomePageState extends State<HomePage>
                         const Expanded(child: SizedBox()),
                       ],
                     ),
-
                     const SizedBox(height: 16),
                   ],
                 ),
@@ -407,7 +376,6 @@ class _HomePageState extends State<HomePage>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Recognized text
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
                     child: _recognizedText.isNotEmpty
@@ -426,10 +394,7 @@ class _HomePageState extends State<HomePage>
                     )
                         : const SizedBox(key: ValueKey('empty')),
                   ),
-
                   const SizedBox(height: 16),
-
-                  // Pulsing mic button
                   ScaleTransition(
                     scale: _pulseAnim,
                     child: GestureDetector(
@@ -462,10 +427,7 @@ class _HomePageState extends State<HomePage>
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 12),
-
-                  // Status label
                   Text(
                     _statusLabel,
                     textAlign: TextAlign.center,
@@ -474,10 +436,7 @@ class _HomePageState extends State<HomePage>
                       color: colorScheme.onSurfaceVariant,
                     ),
                   ),
-
                   const SizedBox(height: 10),
-
-                  // Hint chips
                   if (!_isListening)
                     Wrap(
                       alignment: WrapAlignment.center,

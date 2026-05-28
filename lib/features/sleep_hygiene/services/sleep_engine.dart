@@ -1,7 +1,21 @@
 // sleep_engine.dart
 // Polished rule-based engine + Riverpod notifier for the sleep module.
-// Includes: semantic scoring, tone detection, context tracking,
-// conversation history, repeat, follow-ups, and debug logging.
+//
+// IMPROVEMENTS APPLIED vs original:
+//  1. Negation-aware scoring   — keywords following a negation prefix
+//                                are discounted (score × 0) for that intent.
+//  2. Input length normalisation — raw hit count is divided by √(wordCount)
+//                                  so short precise inputs beat long rambling ones.
+//  3. History-influenced scoring — the previous intent gets a +1 recency boost,
+//                                  keeping the conversation contextually coherent.
+//  4. Synonym expansion        — applied in _normalise() via SleepCorpus.synonymMap
+//                                before any scoring; all variants collapse to their
+//                                canonical form automatically.
+//  5. N-gram matching          — bigrams (×2) and trigrams (×3) are scored
+//                                separately from unigrams and merged, so precise
+//                                multi-word phrases dominate accidental hits.
+
+import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -31,13 +45,16 @@ class SleepEngine {
   String _lastResponse = '';
   final List<IntentLog> _intentLog = [];
 
-  // Public accessors for debug
+  // Public accessors for debug / testing
   List<IntentLog> get intentLog => List.unmodifiable(_intentLog);
   SleepIntent? get previousIntent => _previousIntent;
 
   // ── Main entry point ─────────────────────────────────────────
-  SleepResponse process(String input) {
+  SleepResponse process(String input, {String context = ''}) {
+
+    // IMPROVEMENT 4: synonym expansion happens inside _normalise()
     final text = _normalise(input);
+    final contextText = context.isNotEmpty ? _normalise(context) : '';
 
     // Empty / no speech
     if (text.isEmpty) {
@@ -49,10 +66,10 @@ class SleepEngine {
 
     // 1. Crisis — always first, no scoring needed
     if (_isCrisis(text)) {
-      final msg = 'This sounds serious. Your safety comes first. '
+      const msg = 'This sounds serious. Your safety comes first. '
           'I am connecting you to crisis support now.';
       _log(input, SleepIntent.unknown, 1.0, EmotionalTone.neutral);
-      return SleepResponse(
+      return const SleepResponse(
         intent: SleepIntent.unknown,
         message: msg,
         isCrisis: true,
@@ -73,35 +90,30 @@ class SleepEngine {
       );
     }
 
-    // 3. Detect emotional tone
+    // 3. Detect emotional tone (uses expanded/normalised text)
     final tone = _detectTone(text);
 
-    // 4. Semantic scoring — score every intent
+    // 4. Full scoring pipeline (all 5 improvements feed in here)
     final scores = _scoreAllIntents(text);
     final topIntent = scores.keys.first;
     final topScore = scores[topIntent]!;
 
-    // Confidence: normalise raw score to 0–1 (cap at 5 keyword hits = 1.0)
+    // Confidence: normalise to 0–1; cap at 5.0 weighted score = 1.0
     final confidence = (topScore / 5.0).clamp(0.0, 1.0);
 
     // 5. Log for debug
     _log(input, topIntent, confidence, tone);
 
     // 6. Handle meta-intents that need engine state
-    if (topIntent == SleepIntent.repeat) {
-      return _handleRepeat();
-    }
+    if (topIntent == SleepIntent.repeat) return _handleRepeat();
+    if (topIntent == SleepIntent.affirmation) return _handleAffirmation();
+    if (topIntent == SleepIntent.negation) return _handleNegation();
 
-    if (topIntent == SleepIntent.affirmation) {
-      return _handleAffirmation();
-    }
+    // 7. IMPROVEMENT 2 (single-word inputs): lower threshold for 1-token queries
+    final wordCount = text.split(' ').length;
+    final threshold = wordCount == 1 ? 0.05 : 0.10;
 
-    if (topIntent == SleepIntent.negation) {
-      return _handleNegation();
-    }
-
-    // 7. Below confidence threshold → unknown
-    if (confidence < 0.1) {
+    if (confidence < threshold) {
       final msg = SleepCorpus.pick(
           SleepCorpus.responseVariants[SleepIntent.unknown]!);
       _lastResponse = msg;
@@ -125,13 +137,72 @@ class SleepEngine {
   bool isExit(String input) => SleepCorpus.exitKeywords
       .any((kw) => _normalise(input).contains(kw));
 
-  // ── Normalisation ────────────────────────────────────────────
-  // Lowercase, trim, collapse whitespace, strip punctuation.
-  String _normalise(String input) => input
-      .toLowerCase()
-      .trim()
-      .replaceAll(RegExp(r"[^\w\s']"), ' ')
-      .replaceAll(RegExp(r'\s+'), ' ');
+  // ════════════════════════════════════════════════════════════════
+  // IMPROVEMENT 4 — SYNONYM EXPANSION
+  // Replaces every synonym with its canonical form so the rest of
+  // the engine only needs to know canonical words.
+  // ════════════════════════════════════════════════════════════════
+  String _normalise(String input) {
+    // Step 1: lowercase, trim, strip punctuation, collapse whitespace
+    String text = input
+        .toLowerCase()
+        .trim()
+        .replaceAll(RegExp(r"[^\w\s']"), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ');
+
+    // Step 2: apply synonym map (longest match first to avoid partial clobbers)
+    final sortedSynonyms = SleepCorpus.synonymMap.keys.toList()
+      ..sort((a, b) => b.length.compareTo(a.length));
+
+    for (final synonym in sortedSynonyms) {
+      if (text.contains(synonym)) {
+        text = text.replaceAll(synonym, SleepCorpus.synonymMap[synonym]!);
+      }
+    }
+
+    // Strip question framing before scoring
+    text = _stripQuestionFrame(text);
+
+    return text.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  // ── Question frame stripping ──────────────────────────────────
+  // IMPROVEMENT: strips conversational question wrappers before scoring
+  // so "how can you give me tips" reduces to "tips" for clean intent match.
+  static const List<String> _questionFrames = [
+    'how can you give me',
+    'how can i get',
+    'can you give me',
+    'can you show me',
+    'can you tell me',
+    'could you give me',
+    'would you give me',
+    'do you have any',
+    'give me some',
+    'show me some',
+    'tell me some',
+    'what are some',
+    'how do i get',
+    'how to get',
+    'i want to know about',
+    'i would like to know',
+    'i need help with',
+    'help me with',
+    'help me understand',
+  ];
+
+  String _stripQuestionFrame(String text) {
+    final sorted = List<String>.from(_questionFrames)
+      ..sort((a, b) => b.length.compareTo(a.length));
+    for (final frame in sorted) {
+      if (text.startsWith(frame)) {
+        return text.substring(frame.length).trim();
+      }
+      text = text.replaceAll(frame, '').trim();
+    }
+    return text;
+  }
+
 
   // ── Crisis ───────────────────────────────────────────────────
   bool _isCrisis(String t) =>
@@ -159,19 +230,154 @@ class SleepEngine {
     return result;
   }
 
-  // ── Semantic scoring ─────────────────────────────────────────
-  // Count how many keywords from each intent appear in the input.
-  // Returns intents sorted by score descending.
-  Map<SleepIntent, int> _scoreAllIntents(String t) {
-    final scores = <SleepIntent, int>{};
-    for (final e in SleepCorpus.intentKeywords.entries) {
-      final hits = e.value.where((kw) => t.contains(kw)).length;
-      if (hits > 0) scores[e.key] = hits;
-    }
-    if (scores.isEmpty) return {SleepIntent.unknown: 0};
+  // ════════════════════════════════════════════════════════════════
+  // IMPROVEMENT 1 — NEGATION-AWARE SCORING
+  // Returns true if the keyword appears immediately after a negation
+  // prefix in the text, meaning the user is explicitly rejecting it.
+  // ════════════════════════════════════════════════════════════════
+  bool _isNegated(String text, String keyword) {
+    for (final prefix in SleepCorpus.negationPrefixes) {
+      // Check if "<prefix> <keyword>" or "<prefix> ... <keyword>" within 4 words
+      final prefixIdx = text.indexOf(prefix);
+      if (prefixIdx == -1) continue;
 
-    final sorted = scores.entries.toList()
+      final afterPrefix = text.substring(prefixIdx + prefix.length).trim();
+      final wordsAfter = afterPrefix.split(' ').take(4).join(' ');
+      if (wordsAfter.contains(keyword)) return true;
+    }
+    return false;
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // IMPROVEMENT 2 + 3 + 5 — UNIFIED SCORING PIPELINE
+  //
+  //  Step A: Score unigrams (weight ×1), with negation discounting.
+  //  Step B: Score bigrams  (weight ×2), with negation discounting.
+  //  Step C: Score trigrams (weight ×3), with negation discounting.
+  //  Step D: Apply input-length normalisation  ÷ √(wordCount).
+  //  Step E: Apply history recency boost       +1 to _previousIntent.
+  //  Step F: Sort descending and return.
+  // ════════════════════════════════════════════════════════════════
+  Map<SleepIntent, double> _scoreAllIntents(String text, {String contextText = ''}) {
+    final scores = <SleepIntent, double>{};
+    final wordCount = text.split(' ').length.clamp(1, 999);
+
+    // ── Step A: Unigrams (weight 1) ──────────────────────────────
+    for (final entry in SleepCorpus.intentKeywords.entries) {
+      double intentScore = 0;
+      for (final kw in entry.value) {
+        if (!text.contains(kw)) continue;
+        // IMPROVEMENT 1: skip if negated
+        if (_isNegated(text, kw)) continue;
+        intentScore += 1.0;
+      }
+      if (intentScore > 0) {
+        scores[entry.key] = (scores[entry.key] ?? 0) + intentScore;
+      }
+    }
+
+    // ── Step B: Bigrams (weight 2) ───────────────────────────────
+    for (final entry in SleepCorpus.bigrams.entries) {
+      double intentScore = 0;
+      for (final kw in entry.value) {
+        if (!text.contains(kw)) continue;
+        if (_isNegated(text, kw)) continue;
+        intentScore += 2.0; // IMPROVEMENT 5: bigram weight
+      }
+      if (intentScore > 0) {
+        scores[entry.key] = (scores[entry.key] ?? 0) + intentScore;
+      }
+    }
+
+    // ── Step C: Trigrams (weight 3) ──────────────────────────────
+    for (final entry in SleepCorpus.trigrams.entries) {
+      double intentScore = 0;
+      for (final kw in entry.value) {
+        if (!text.contains(kw)) continue;
+        if (_isNegated(text, kw)) continue;
+        intentScore += 3.0; // IMPROVEMENT 5: trigram weight
+      }
+      if (intentScore > 0) {
+        scores[entry.key] = (scores[entry.key] ?? 0) + intentScore;
+      }
+    }
+
+    if (scores.isEmpty) return {SleepIntent.unknown: 0.0};
+
+    // ── Step D: Input-length normalisation ───────────────────────
+    // IMPROVEMENT 2: divide by √(wordCount) so long inputs don't
+    // win purely by having more words that accidentally match.
+    final normFactor = sqrt(wordCount.toDouble());
+    final normScores = scores.map(
+          (intent, raw) => MapEntry(intent, raw / normFactor),
+    );
+
+    // ── Step E: History recency boost ────────────────────────────
+    // IMPROVEMENT 3: give the previously matched intent a small
+    // contextual nudge (+1 raw point before normalisation equivalent).
+    if (_previousIntent != null && normScores.containsKey(_previousIntent)) {
+      normScores[_previousIntent!] =
+          normScores[_previousIntent!]! + (1.0 / normFactor);
+    }
+
+    // ── Step F: Multi-turn context scoring (weight 0.3×) ─────────
+    // Scores the last 3 user turns at reduced weight and merges
+    // into current scores so conversation history influences intent.
+    if (contextText.isNotEmpty) {
+      final contextWordCount =
+      contextText.split(' ').length.clamp(1, 999);
+      final contextNormFactor = sqrt(contextWordCount.toDouble());
+
+      // Unigrams from context
+      for (final entry in SleepCorpus.intentKeywords.entries) {
+        double ctxScore = 0;
+        for (final kw in entry.value) {
+          if (!contextText.contains(kw)) continue;
+          if (_isNegated(contextText, kw)) continue;
+          ctxScore += 1.0;
+        }
+        if (ctxScore > 0) {
+          final normalised = (ctxScore / contextNormFactor) * 0.3;
+          normScores[entry.key] =
+              (normScores[entry.key] ?? 0) + normalised;
+        }
+      }
+
+      // Bigrams from context
+      for (final entry in SleepCorpus.bigrams.entries) {
+        double ctxScore = 0;
+        for (final kw in entry.value) {
+          if (!contextText.contains(kw)) continue;
+          if (_isNegated(contextText, kw)) continue;
+          ctxScore += 2.0;
+        }
+        if (ctxScore > 0) {
+          final normalised = (ctxScore / contextNormFactor) * 0.3;
+          normScores[entry.key] =
+              (normScores[entry.key] ?? 0) + normalised;
+        }
+      }
+
+      // Trigrams from context
+      for (final entry in SleepCorpus.trigrams.entries) {
+        double ctxScore = 0;
+        for (final kw in entry.value) {
+          if (!contextText.contains(kw)) continue;
+          if (_isNegated(contextText, kw)) continue;
+          ctxScore += 3.0;
+        }
+        if (ctxScore > 0) {
+          final normalised = (ctxScore / contextNormFactor) * 0.3;
+          normScores[entry.key] =
+              (normScores[entry.key] ?? 0) + normalised;
+        }
+      }
+    }
+
+    // ── Step F: Sort descending ───────────────────────────────────
+    final sorted = normScores.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
+
     return Map.fromEntries(sorted);
   }
 
@@ -188,7 +394,6 @@ class SleepEngine {
   }
 
   SleepResponse _handleAffirmation() {
-    // If previous intent had a natural follow-up, continue it
     if (_previousIntent != null) {
       final followUp = _buildFollowUp(_previousIntent!);
       if (followUp != null) return followUp;
@@ -207,25 +412,23 @@ class SleepEngine {
     return _staticResponse(msg, SleepIntent.negation);
   }
 
-  // After affirmation, provide a deeper follow-up for some intents
   SleepResponse? _buildFollowUp(SleepIntent intent) {
     switch (intent) {
       case SleepIntent.cantSleep:
-      // Suggest breathing handoff
-        return SleepResponse(
+        return const SleepResponse(
           intent: SleepIntent.cantSleep,
           message: 'Would you like to try a breathing exercise? '
               'It can help calm your nervous system right now.',
-          suggestions: const ['Yes, try breathing', 'Give me more tips', 'No thanks'],
+          suggestions: ['Yes, try breathing', 'Give me more tips', 'No thanks'],
           confidence: 1.0,
         );
       case SleepIntent.stressed:
-        return SleepResponse(
+        return const SleepResponse(
           intent: SleepIntent.stressed,
-          message: 'Since you\'re still stressed, I can walk you through '
+          message: "Since you're still stressed, I can walk you through "
               'box breathing or take you to the breathing module. '
               'Which would you prefer?',
-          suggestions: const ['Box breathing', 'Breathing module', 'Something else'],
+          suggestions: ['Box breathing', 'Breathing module', 'Something else'],
           confidence: 1.0,
         );
       default:
@@ -235,18 +438,19 @@ class SleepEngine {
 
   // ── Response builder ─────────────────────────────────────────
   SleepResponse _buildResponse(
-      SleepIntent intent, EmotionalTone tone, double confidence) {
-
-    // For emotional tone intents, map to their response content
+      SleepIntent intent,
+      EmotionalTone tone,
+      double confidence,
+      ) {
     final effectiveIntent = _resolveEffectiveIntent(intent, tone);
 
-    // Pick message
     final messages = SleepCorpus.intentMessages[effectiveIntent];
     String message = messages != null
         ? SleepCorpus.pick(messages)
-        : SleepCorpus.pick(SleepCorpus.responseVariants[SleepIntent.unknown]!);
+        : SleepCorpus.pick(
+        SleepCorpus.responseVariants[SleepIntent.unknown]!);
 
-    // Prepend tone prefix if tone is non-neutral and intent is a content intent
+    // Prepend tone prefix for emotional context
     if (tone != EmotionalTone.neutral) {
       final prefixes = SleepCorpus.tonePrefixes[tone];
       if (prefixes != null) {
@@ -254,7 +458,7 @@ class SleepEngine {
       }
     }
 
-    // Special cases: greeting, gratitude, help use responseVariants only
+    // Greeting / gratitude / help use responseVariants only
     if ([SleepIntent.greeting, SleepIntent.gratitude, SleepIntent.help]
         .contains(intent)) {
       message = SleepCorpus.pick(SleepCorpus.responseVariants[intent]!);
@@ -279,14 +483,11 @@ class SleepEngine {
     );
   }
 
-  // Map emotional intents + cross-intent tone blending
   SleepIntent _resolveEffectiveIntent(SleepIntent intent, EmotionalTone tone) {
-    // If intent is directly an emotional one, use it
     if ([SleepIntent.stressed, SleepIntent.tired, SleepIntent.frustrated]
         .contains(intent)) {
       return intent;
     }
-    // If tone is strong and intent is generic, blend in tone
     if (tone == EmotionalTone.stressed && intent == SleepIntent.cantSleep) {
       return SleepIntent.stressed;
     }
@@ -318,7 +519,12 @@ class SleepEngine {
     }
   }
 
-  void _log(String input, SleepIntent intent, double confidence, EmotionalTone tone) {
+  void _log(
+      String input,
+      SleepIntent intent,
+      double confidence,
+      EmotionalTone tone,
+      ) {
     final entry = IntentLog(
       input: input,
       intent: intent,
@@ -339,10 +545,10 @@ enum SleepVuiStatus { idle, listening, processing, speaking, error }
 
 class SleepVuiState {
   final SleepVuiStatus status;
-  final List<ChatMessage> history;      // full conversation
+  final List<ChatMessage> history;
   final List<SleepTip>? tips;
   final List<String>? routineSteps;
-  final List<String>? suggestions;      // follow-up chips
+  final List<String>? suggestions;
   final String? errorMessage;
   final bool hasMicPermission;
   final String? pendingRoute;
@@ -390,7 +596,6 @@ class SleepVuiState {
     );
   }
 
-  // Convenience: add a message to history immutably
   SleepVuiState withMessage(ChatMessage msg) =>
       copyWith(history: [...history, msg]);
 }
@@ -416,7 +621,6 @@ class SleepVuiNotifier extends StateNotifier<SleepVuiState> {
       await _tts.speak(_engine.entryMessage);
     } catch (_) {}
 
-    // Add entry message to history
     state = state.withMessage(ChatMessage(
       isUser: false,
       text: _engine.entryMessage,
@@ -438,7 +642,6 @@ class SleepVuiNotifier extends StateNotifier<SleepVuiState> {
       state = state.copyWith(hasMicPermission: true);
     }
 
-    // Interrupt TTS if speaking
     await _tts.stop();
 
     state = state.copyWith(
@@ -481,14 +684,22 @@ class SleepVuiNotifier extends StateNotifier<SleepVuiState> {
 
   // ── Core input handler ───────────────────────────────────────
   Future<void> _handleInput(String input, {required bool isVoice}) async {
-    // Add user message to history
     state = state
         .withMessage(ChatMessage(isUser: true, text: input))
         .copyWith(status: SleepVuiStatus.processing, clearCards: true);
 
-    final engineResponse = _engine.process(input);
+    // Build context string from last 3 user messages (excluding current)
+    final recentContext = state.history
+        .where((m) => m.isUser)
+        .toList()
+        .reversed
+        .skip(1)          // skip current turn already added above
+        .take(3)
+        .map((m) => m.text)
+        .join(' ');
 
-    // Navigation: crisis or handoff
+    final engineResponse = _engine.process(input, context: recentContext);
+
     if (engineResponse.isCrisis || engineResponse.handoffRoute != null) {
       final route = engineResponse.isCrisis
           ? '/crisis'
@@ -512,7 +723,6 @@ class SleepVuiNotifier extends StateNotifier<SleepVuiState> {
       return;
     }
 
-    // Normal response
     state = state
         .withMessage(ChatMessage(
       isUser: false,

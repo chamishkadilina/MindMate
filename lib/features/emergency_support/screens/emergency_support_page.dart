@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_tts/flutter_tts.dart';
+import 'package:mindmate/features/sleep_hygiene/services/tts_service.dart';
 
 class EmergencySupportPage extends StatefulWidget {
   const EmergencySupportPage({super.key});
@@ -9,7 +9,7 @@ class EmergencySupportPage extends StatefulWidget {
 }
 
 class _EmergencySupportPageState extends State<EmergencySupportPage> {
-  final FlutterTts _tts = FlutterTts();
+  final TtsService _tts = TtsService();
 
   final List<Map<String, dynamic>> _contacts = [
     {
@@ -60,20 +60,17 @@ class _EmergencySupportPageState extends State<EmergencySupportPage> {
   }
 
   Future<void> _initTts() async {
-    await _tts.setLanguage('en-US');
-    await _tts.setSpeechRate(0.45);
-    await _tts.setVolume(1.0);
-
+    await _tts.initialise();
     await Future.delayed(const Duration(milliseconds: 300));
     await _tts.speak(
       'You are in the Emergency Support page. '
-      'Help is available. Please reach out to one of the contacts shown.',
+          'Help is available. Please reach out to one of the contacts shown.',
     );
   }
 
   @override
   void dispose() {
-    _tts.stop();
+    _tts.dispose();
     super.dispose();
   }
 
@@ -94,7 +91,6 @@ class _EmergencySupportPageState extends State<EmergencySupportPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Banner ───────────────────────────────────────────────────
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -110,40 +106,18 @@ class _EmergencySupportPageState extends State<EmergencySupportPage> {
               child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '🆘  You are not alone',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
+                  Text('🆘  You are not alone',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
                   SizedBox(height: 6),
-                  Text(
-                    'Help is always available. Reach out to a helpline or a trusted person.',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      height: 1.4,
-                    ),
-                  ),
+                  Text('Help is always available. Reach out to a helpline or a trusted person.',
+                      style: TextStyle(color: Colors.white, fontSize: 13, height: 1.4)),
                 ],
               ),
             ),
-
             const SizedBox(height: 28),
-
-            Text(
-              'Emergency Contacts',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.bold,
-                color: cs.onSurface,
-              ),
-            ),
+            Text('Emergency Contacts',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: cs.onSurface)),
             const SizedBox(height: 12),
-
-            // ── Contact cards ────────────────────────────────────────────
             ...List.generate(_contacts.length, (i) {
               final c = _contacts[i];
               return Container(
@@ -152,73 +126,41 @@ class _EmergencySupportPageState extends State<EmergencySupportPage> {
                 decoration: BoxDecoration(
                   color: (c['color'] as Color).withOpacity(0.09),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: (c['color'] as Color).withOpacity(0.25),
-                  ),
+                  border: Border.all(color: (c['color'] as Color).withOpacity(0.25)),
                 ),
                 child: Row(
                   children: [
                     CircleAvatar(
                       backgroundColor: (c['color'] as Color).withOpacity(0.18),
-                      child: Icon(
-                        c['icon'] as IconData,
-                        color: c['color'] as Color,
-                      ),
+                      child: Icon(c['icon'] as IconData, color: c['color'] as Color),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            c['title'] as String,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
-                            ),
-                          ),
+                          Text(c['title'] as String,
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                           const SizedBox(height: 2),
-                          Text(
-                            c['number'] as String,
-                            style: TextStyle(
-                              color: c['color'] as Color,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                            ),
-                          ),
-                          Text(
-                            c['subtitle'] as String,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: cs.onSurfaceVariant,
-                            ),
-                          ),
+                          Text(c['number'] as String,
+                              style: TextStyle(
+                                  color: c['color'] as Color,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15)),
+                          Text(c['subtitle'] as String,
+                              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
                         ],
                       ),
                     ),
-                    Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 14,
-                      color: cs.outlineVariant,
-                    ),
+                    Icon(Icons.arrow_forward_ios_rounded, size: 14, color: cs.outlineVariant),
                   ],
                 ),
               );
             }),
-
             const SizedBox(height: 28),
-
-            Text(
-              'Immediate Coping Tips',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.bold,
-                color: cs.onSurface,
-              ),
-            ),
+            Text('Immediate Coping Tips',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: cs.onSurface)),
             const SizedBox(height: 12),
-
-            // ── Tips ─────────────────────────────────────────────────────
             ...List.generate(_tips.length, (i) {
               final t = _tips[i];
               return Container(
@@ -237,22 +179,11 @@ class _EmergencySupportPageState extends State<EmergencySupportPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            t['title']!,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
-                            ),
-                          ),
+                          Text(t['title']!,
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                           const SizedBox(height: 3),
-                          Text(
-                            t['body']!,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: cs.onSurfaceVariant,
-                              height: 1.4,
-                            ),
-                          ),
+                          Text(t['body']!,
+                              style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant, height: 1.4)),
                         ],
                       ),
                     ),
