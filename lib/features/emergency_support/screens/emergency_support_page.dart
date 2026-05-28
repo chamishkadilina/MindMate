@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mindmate/features/sleep_hygiene/services/tts_service.dart';
+import 'package:mindmate/core/services/tts_service.dart';
 
 class EmergencySupportPage extends StatefulWidget {
   const EmergencySupportPage({super.key});
@@ -70,7 +70,6 @@ class _EmergencySupportPageState extends State<EmergencySupportPage> {
 
   @override
   void dispose() {
-    _tts.dispose();
     super.dispose();
   }
 

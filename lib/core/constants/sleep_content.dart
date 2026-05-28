@@ -1,66 +1,47 @@
-// sleep_content.dart
-// All types, keyword corpus, and response content for the sleep module.
-// Pure Dart — no Flutter imports.
+// lib/core/constants/sleep_content.dart
 //
-// IMPROVEMENTS APPLIED:
-//  1. Synonym expansion  — each intent has a synonyms map that maps
-//     variant words to their canonical form before scoring.
-//  2. N-gram support     — 2- and 3-word phrases are stored separately
-//     and weighted 2× / 3× vs single keywords.
-//  3. Negation awareness — negation prefix list used by the engine
-//     to discount intents whose keywords follow a negation marker.
+// Single source of truth for the Sleep Hygiene module.
+// Contains:
+//   • SleepIntent, EmotionalTone enums
+//   • SleepTip, SleepResponse, ChatMessage, IntentLog data classes
+//   • SleepCorpus — all NLP data + all spoken strings (all map)
 
 import 'dart:math';
 
 // ════════════════════════════════════════════════════════════════
-// 1. TYPES
+// ENUMS
 // ════════════════════════════════════════════════════════════════
 
 enum SleepIntent {
-  greeting,
-  gratitude,
-  repeat,
-  help,
-  affirmation,
-  negation,
   cantSleep,
   bedtimeRoutine,
-  sleepTips,
   screenTime,
   nap,
-  wakeTime,
   sleepDuration,
+  wakeTime,
+  sleepTips,
   stressed,
   tired,
   frustrated,
+  greeting,
+  gratitude,
+  help,
+  affirmation,
+  negation,
+  repeat,
   unknown,
 }
 
-enum EmotionalTone { stressed, tired, frustrated, neutral }
-
-class SleepResponse {
-  final String message;
-  final SleepIntent intent;
-  final EmotionalTone tone;
-  final List<SleepTip>? tips;
-  final List<String>? routineSteps;
-  final List<String>? suggestions;
-  final String? handoffRoute;
-  final bool isCrisis;
-  final double confidence;
-
-  const SleepResponse({
-    required this.message,
-    required this.intent,
-    this.tone = EmotionalTone.neutral,
-    this.tips,
-    this.routineSteps,
-    this.suggestions,
-    this.handoffRoute,
-    this.isCrisis = false,
-    this.confidence = 1.0,
-  });
+enum EmotionalTone {
+  neutral,
+  stressed,
+  tired,
+  frustrated,
 }
+
+// ════════════════════════════════════════════════════════════════
+// DATA CLASSES
+// ════════════════════════════════════════════════════════════════
 
 class SleepTip {
   final String emoji;
@@ -74,622 +55,579 @@ class SleepTip {
   });
 }
 
+class SleepResponse {
+  final SleepIntent intent;
+  final String message;
+  final String? voiceKey;
+  final EmotionalTone tone;
+  final List<SleepTip>? tips;
+  final List<String>? routineSteps;
+  final List<String>? suggestions;
+  final double confidence;
+  final bool isCrisis;
+  final String? handoffRoute;
+
+  const SleepResponse({
+    required this.intent,
+    required this.message,
+    this.voiceKey,
+    this.tone = EmotionalTone.neutral,
+    this.tips,
+    this.routineSteps,
+    this.suggestions,
+    this.confidence = 0.0,
+    this.isCrisis = false,
+    this.handoffRoute,
+  });
+}
+
 class ChatMessage {
   final bool isUser;
   final String text;
-  final DateTime timestamp;
   final SleepIntent? intent;
   final double? confidence;
 
-  ChatMessage({
+  const ChatMessage({
     required this.isUser,
     required this.text,
     this.intent,
     this.confidence,
-  }) : timestamp = DateTime.now();
+  });
 }
 
 class IntentLog {
-  final DateTime time;
   final String input;
   final SleepIntent intent;
   final double confidence;
   final EmotionalTone tone;
 
-  IntentLog({
+  const IntentLog({
     required this.input,
     required this.intent,
     required this.confidence,
     required this.tone,
-  }) : time = DateTime.now();
+  });
 
   @override
   String toString() =>
-      '[${time.hour}:${time.minute.toString().padLeft(2, '0')}] '
-          'intent=${intent.name} conf=${confidence.toStringAsFixed(2)} '
+      '[SleepEngine] intent=${intent.name} conf=${confidence.toStringAsFixed(2)} '
           'tone=${tone.name} input="$input"';
 }
 
 // ════════════════════════════════════════════════════════════════
-// 2. CORPUS
+// CORPUS
 // ════════════════════════════════════════════════════════════════
 
 class SleepCorpus {
   SleepCorpus._();
 
-  static final _random = Random();
+  static final _rng = Random();
 
-  static String pick(List<String> variants) =>
-      variants[_random.nextInt(variants.length)];
+  /// Pick a random item from a list.
+  static T pick<T>(List<T> list) => list[_rng.nextInt(list.length)];
 
-  // ── Crisis ───────────────────────────────────────────────────
-  static const List<String> crisisKeywords = [
-    "don't want to wake up",
-    "dont want to wake up",
-    "never wake up",
-    "sleep forever",
-    "wish i wouldn't wake",
-    "wish i wouldnt wake",
-    "not wake up",
-    "sleep and not wake",
-    "go to sleep forever",
+  // ── Spoken strings (single source of truth for VoiceRegistry) ──
+
+  static const Map<String, String> all = {
+
+    // ── Entry / exit ──────────────────────────────────────────────────────────
+    'sleep.entry':
+    "I'm your sleep assistant. Ask me about bedtime routines, "
+        "what to do if you can't sleep, screen time, naps, "
+        "sleep duration, or general sleep tips.",
+    'sleep.exit':
+    'Sweet dreams! Come back any time you need sleep support.',
+    'sleep.noInput':
+    "I didn't hear anything. Please tap the mic and speak clearly.",
+    'sleep.nothingToRepeat':
+    "There's nothing to repeat yet. Ask me something first.",
+
+    // ── Crisis / handoff ──────────────────────────────────────────────────────
+    'sleep.crisis':
+    'This sounds serious. Your safety comes first. '
+        'I am connecting you to crisis support now.',
+    'sleep.handoff.breathing':
+    "That sounds like it would be better handled in the "
+        "breathing module. Taking you there now.",
+    'sleep.handoff.meditation':
+    'A guided meditation sounds perfect. Taking you there now.',
+    'sleep.handoff.psychoeducation':
+    'Connecting you to the psychoeducation module now.',
+    'sleep.handoff.default':
+    "Let me take you to the right place.",
+
+    // ── Follow-ups ────────────────────────────────────────────────────────────
+    'sleep.cantSleep.followUp':
+    'Would you like to try a breathing exercise? '
+        'It can help calm your nervous system right now.',
+    'sleep.stressed.followUp':
+    "Since you're still stressed, I can walk you through "
+        'box breathing or take you to the breathing module. '
+        'Which would you prefer?',
+
+    // ── Greeting ──────────────────────────────────────────────────────────────
+    'sleep.greeting.0':
+    "Hello! I'm your sleep assistant. You can ask me about bedtime routines, "
+        "why you can't sleep, screen time habits, naps, or general sleep tips.",
+    'sleep.greeting.1':
+    "Hey there! Ready to help with your sleep. What's on your mind — "
+        'trouble falling asleep, a bedtime routine, or something else?',
+    'sleep.greeting.2':
+    "Hi! I'm here to help you sleep better. Ask me anything about sleep hygiene, "
+        "routines, naps, or what to do when your mind won't switch off.",
+
+    // ── Gratitude ─────────────────────────────────────────────────────────────
+    'sleep.gratitude.0': "You're welcome! Sleep well tonight.",
+    'sleep.gratitude.1': 'Glad that helped. Feel free to ask anything else.',
+    'sleep.gratitude.2': 'Of course! Come back anytime you need sleep support.',
+    'sleep.gratitude.3': 'Happy to help. Wishing you a restful night.',
+
+    // ── Help ──────────────────────────────────────────────────────────────────
+    'sleep.help.0':
+    "Here's what I can help with: trouble falling asleep, bedtime routines, "
+        'screen time before bed, nap advice, how many hours of sleep you need, '
+        'and fixing your wake time. Just ask naturally.',
+    'sleep.help.1':
+    "You can ask me things like: I can't sleep, give me a bedtime routine, "
+        'is napping bad, how much sleep do I need, or help with screen time.',
+    'sleep.help.2':
+    'I specialise in sleep hygiene. Try asking about: insomnia, bedtime wind-down, '
+        'blue light, power naps, sleep duration, or wake schedules.',
+
+    // ── Affirmation ───────────────────────────────────────────────────────────
+    'sleep.affirmation.0': "Great, let's continue.",
+    'sleep.affirmation.1': 'Alright, here we go.',
+    'sleep.affirmation.2': 'Sure thing.',
+    'sleep.affirmation.3': "Okay, I'll go ahead.",
+
+    // ── Negation ──────────────────────────────────────────────────────────────
+    'sleep.negation.0': "No problem, let me know if there's anything else.",
+    'sleep.negation.1': "Alright, I'm here whenever you need me.",
+    'sleep.negation.2': "Got it. Just say the word if you'd like help with something.",
+
+    // ── Unknown ───────────────────────────────────────────────────────────────
+    'sleep.unknown.0':
+    "I didn't quite catch that. Try asking about trouble sleeping, "
+        'a bedtime routine, screen time, naps, or sleep duration.',
+    'sleep.unknown.1':
+    "Not sure I understood. You can say things like I can't sleep "
+        "or give me sleep tips and I'll help.",
+    'sleep.unknown.2':
+    "Could you rephrase that? I'm best with questions about sleep — "
+        'routines, insomnia, naps, wake times, and screen habits.',
+    'sleep.unknown.3':
+    "I didn't get that one. Ask me about bedtime routines, "
+        "why you can't sleep, or how much sleep you need.",
+
+    // ── Can't sleep ───────────────────────────────────────────────────────────
+    'sleep.cantSleep.0':
+    'Struggling to sleep is really tough. Try the 20-minute rule: '
+        "if you're awake for more than 20 minutes, get up, do something "
+        'quiet in dim light, then return when you feel sleepy.',
+    'sleep.cantSleep.1':
+    "When sleep won't come, the worst thing is lying there fighting it. "
+        'Get up, reset, and come back to bed when your body is ready.',
+    'sleep.cantSleep.2':
+    'Racing thoughts at night are common. The key is to stop trying to force sleep '
+        '— your brain needs to feel safe, not pressured.',
+
+    // ── Bedtime routine ───────────────────────────────────────────────────────
+    'sleep.bedtimeRoutine.0':
+    "A consistent wind-down routine trains your brain to expect sleep. "
+        "Here's a simple 30-minute plan for tonight.",
+    'sleep.bedtimeRoutine.1':
+    'Your pre-sleep routine is a signal to your nervous system. '
+        'The same steps each night build a powerful sleep association.',
+    'sleep.bedtimeRoutine.2':
+    "Routines work because they're predictable. Here's one to try tonight.",
+
+    // ── Screen time ───────────────────────────────────────────────────────────
+    'sleep.screenTime.0':
+    "Blue light from screens tells your brain it's daytime, "
+        'suppressing melatonin for up to 3 hours. '
+        'Aim to put devices away 30 to 60 minutes before bed.',
+    'sleep.screenTime.1':
+    'Every scroll before bed delays your melatonin release. '
+        'Even 30 minutes screen-free makes a measurable difference.',
+    'sleep.screenTime.2':
+    'Screens are the biggest modern enemy of sleep. '
+        "The content also keeps your brain alert — not just the light.",
+
+    // ── Nap ───────────────────────────────────────────────────────────────────
+    'sleep.nap.0':
+    'Naps can be great or harmful depending on how you use them. '
+        'The key is keeping them short and early.',
+    'sleep.nap.1':
+    'A well-timed nap is one of the most effective performance tools. '
+        'A badly timed one can ruin your night.',
+    'sleep.nap.2':
+    'The science on naps is clear: 10 to 20 minutes before 3 PM is the sweet spot.',
+
+    // ── Sleep duration ────────────────────────────────────────────────────────
+    'sleep.sleepDuration.0':
+    'Most adults need 7 to 9 hours. Consistency matters more than total hours — '
+        'the same bedtime every night resets your internal clock.',
+    'sleep.sleepDuration.1':
+    'Sleep needs vary by person, but the 7 to 9 hour range covers most adults. '
+        'Quality matters as much as quantity.',
+    'sleep.sleepDuration.2':
+    "There's no real way to catch up on sleep. "
+        'Chronic short sleep compounds over time.',
+
+    // ── Wake time ─────────────────────────────────────────────────────────────
+    'sleep.wakeTime.0':
+    'A fixed wake time is the single most powerful sleep habit. '
+        'Even on weekends, stay within 30 minutes of your usual time.',
+    'sleep.wakeTime.1':
+    'Your wake time anchors your entire sleep cycle. '
+        "Fixing it is more effective than fixing your bedtime.",
+    'sleep.wakeTime.2':
+    'Consistency at wake time sets your circadian rhythm. '
+        'Irregular wake times cause social jetlag.',
+
+    // ── Sleep tips ────────────────────────────────────────────────────────────
+    'sleep.sleepTips.0':
+    'Here are the most evidence-based sleep habits. '
+        "Pick just one to start — trying everything at once is overwhelming.",
+    'sleep.sleepTips.1':
+    'Good sleep hygiene comes down to a few key behaviours. '
+        "Here are the ones with the strongest evidence.",
+    'sleep.sleepTips.2':
+    'Sleep science is clear on what works. Here are the top habits to build.',
+
+    // ── Stressed ──────────────────────────────────────────────────────────────
+    'sleep.stressed.0':
+    'Stress activates your fight-or-flight response — '
+        "the opposite of what sleep needs. Let's work on calming your system.",
+    'sleep.stressed.1':
+    "A stressed mind needs a physical reset before it can sleep. "
+        "Here's what actually works.",
+    'sleep.stressed.2':
+    "When your mind is overloaded, sleep feels impossible. Let's change that.",
+
+    // ── Tired ─────────────────────────────────────────────────────────────────
+    'sleep.tired.0':
+    "Being this tired and still not sleeping well is genuinely hard. "
+        "Let's figure out what's getting in the way.",
+    'sleep.tired.1':
+    "Exhaustion without good sleep is a cycle we can break. "
+        "Here's where to start.",
+    'sleep.tired.2':
+    "When you're drained, the basics matter most. Let's cover them.",
+
+    // ── Frustrated ────────────────────────────────────────────────────────────
+    'sleep.frustrated.0':
+    'Sleep frustration is real and valid. '
+        'The key is removing the performance pressure around sleep.',
+    'sleep.frustrated.1':
+    "The more you try to force sleep, the harder it becomes. "
+        "Let's take a different approach.",
+    'sleep.frustrated.2':
+    "I hear you — it's exhausting to be exhausted and still not sleep. "
+        "Here's a fresh angle.",
+
+    // ── Tone prefixes ─────────────────────────────────────────────────────────
+    'sleep.tone.stressed.0':
+    "It sounds like your mind is really busy right now. Let's slow things down.",
+    'sleep.tone.stressed.1':
+    "I hear you — stress and sleep really don't mix. Here's what can help.",
+    'sleep.tone.stressed.2':
+    "When stress keeps you awake, your body needs a reset. Let's work on that.",
+    'sleep.tone.tired.0':
+    "You sound really drained. Let's get you some proper rest.",
+    'sleep.tone.tired.1':
+    "Exhaustion is rough. Here's what will actually help tonight.",
+    'sleep.tone.tired.2':
+    "When you're this tired, the right approach matters. Let's cover them.",
+    'sleep.tone.frustrated.0':
+    "I understand the frustration — it's genuinely hard when sleep doesn't come.",
+    'sleep.tone.frustrated.1':
+    "That irritation is completely valid. Let's try a different angle.",
+    'sleep.tone.frustrated.2':
+    "Sleep struggles are exhausting in themselves. Here's something concrete to try.",
+  };
+
+  // ── Key-prefix map (intent → key prefix for picking variants) ────────────
+  static const Map<SleepIntent, String> intentKeyPrefix = {
+    SleepIntent.cantSleep:      'sleep.cantSleep',
+    SleepIntent.bedtimeRoutine: 'sleep.bedtimeRoutine',
+    SleepIntent.screenTime:     'sleep.screenTime',
+    SleepIntent.nap:            'sleep.nap',
+    SleepIntent.sleepDuration:  'sleep.sleepDuration',
+    SleepIntent.wakeTime:       'sleep.wakeTime',
+    SleepIntent.sleepTips:      'sleep.sleepTips',
+    SleepIntent.stressed:       'sleep.stressed',
+    SleepIntent.tired:          'sleep.tired',
+    SleepIntent.frustrated:     'sleep.frustrated',
+    SleepIntent.greeting:       'sleep.greeting',
+    SleepIntent.gratitude:      'sleep.gratitude',
+    SleepIntent.help:           'sleep.help',
+    SleepIntent.affirmation:    'sleep.affirmation',
+    SleepIntent.negation:       'sleep.negation',
+    SleepIntent.unknown:        'sleep.unknown',
+  };
+
+  /// Variant counts per key prefix (how many .0/.1/.2 etc exist in [all]).
+  static const Map<String, int> variantCounts = {
+    'sleep.greeting':       3,
+    'sleep.gratitude':      4,
+    'sleep.help':           3,
+    'sleep.affirmation':    4,
+    'sleep.negation':       3,
+    'sleep.unknown':        4,
+    'sleep.cantSleep':      3,
+    'sleep.bedtimeRoutine': 3,
+    'sleep.screenTime':     3,
+    'sleep.nap':            3,
+    'sleep.sleepDuration':  3,
+    'sleep.wakeTime':       3,
+    'sleep.sleepTips':      3,
+    'sleep.stressed':       3,
+    'sleep.tired':          3,
+    'sleep.frustrated':     3,
+    'sleep.tone.stressed':  3,
+    'sleep.tone.tired':     3,
+    'sleep.tone.frustrated':3,
+  };
+
+  /// Pick a random variant key for the given prefix (e.g. 'sleep.cantSleep' → 'sleep.cantSleep.1').
+  static String pickKey(String prefix) {
+    final count = variantCounts[prefix] ?? 1;
+    final index = _rng.nextInt(count);
+    return '$prefix.$index';
+  }
+
+  /// Look up text by key from [all].
+  static String textFor(String key) {
+    assert(all.containsKey(key), '[SleepCorpus] Missing key: "$key"');
+    return all[key]!;
+  }
+
+  // ── NLP data ──────────────────────────────────────────────────────────────
+
+  static const List<String> directEntryKeywords = [
+    'sleep', 'insomnia', 'bedtime', 'tired', 'rest',
   ];
 
-  // ── Handoff triggers ─────────────────────────────────────────
+  static const List<String> exitKeywords = [
+    'exit', 'quit', 'go back', 'leave', 'close', 'done', 'bye', 'goodbye',
+  ];
+
+  static const List<String> crisisKeywords = [
+    'suicide', 'kill myself', 'end my life', 'self harm', 'hurt myself',
+    'don\'t want to live', 'no reason to live',
+  ];
+
   static const Map<String, List<String>> handoffTriggers = {
     '/breathing': [
-      'i feel anxious',
-      "i'm anxious",
-      'im anxious',
-      'help me relax',
-      'calm me down',
-      'i am panicking',
-      'having a panic',
-      'panic attack',
-      'anxious at night',
-      'anxiety before bed',
+      'breathing exercise', 'breathe', 'breathing technique', 'deep breath',
     ],
     '/meditation': [
-      'meditate before bed',
-      'guided meditation',
-      'meditation for sleep',
-      'open meditation',
+      'meditation', 'meditate', 'guided meditation', 'mindfulness',
     ],
     '/psychoeducation': [
-      'i feel depressed',
-      "i'm depressed",
-      'im depressed',
-      'depression and sleep',
+      'learn more', 'explain', 'psychoeducation', 'why does sleep',
     ],
   };
 
-  // ── Direct entry ─────────────────────────────────────────────
-  static const List<String> directEntryKeywords = [
-    'sleep module',
-    'sleep hygiene',
-    'sleep tips',
-    'bedtime help',
-    'open sleep',
-    'go to sleep module',
-    'help me sleep',
-    'sleep support',
-    'sleep health',
-    'sleep problems',
-    'sleeping problems',
-    'sleep issues',
-    'sleeping issues',
-    'talk about sleep',
-    'sleep advice',
+  static const List<String> negationPrefixes = [
+    'not', "don't", 'no', 'never', "can't", 'cannot', 'without',
+    "doesn't", 'neither', 'nor',
   ];
 
-  // ── Exit ─────────────────────────────────────────────────────
-  static const List<String> exitKeywords = [
-    'exit',
-    'back',
-    'bye',
-    'goodbye',
-    'stop',
-    'quit',
-    'go back',
-    'home',
-    'leave',
-    'done',
-    'enough',
-    'close',
-  ];
-
-  // ════════════════════════════════════════════════════════════════
-  // IMPROVEMENT 1 — SYNONYM EXPANSION
-  // Maps alternate/informal words → canonical form.
-  // Applied during normalisation so every other corpus list stays
-  // clean (no need to list every variant in intentKeywords).
-  // ════════════════════════════════════════════════════════════════
   static const Map<String, String> synonymMap = {
-    // Can't sleep variants
-    'insomnia':           'cant sleep',
-    'sleeplessness':      'cant sleep',
-    'sleepless':          'cant sleep',
-    'insomniac':          'cant sleep',
-    'wakefulness':        'cant sleep',
-
-    // Tired variants
-    'exhausted':          'tired',
-    'drained':            'tired',
-    'fatigued':           'tired',
-    'worn out':           'tired',
-    'burnt out':          'tired',
-    'burned out':         'tired',
-    'lethargic':          'tired',
-    'drowsy':             'tired',
-    'sluggish':           'tired',
-    'weary':              'tired',
-    'knackered':          'tired',
-    'shattered':          'tired',
-    'dead tired':         'tired',
-
-    // Stressed variants
-    'overwhelmed':        'stressed',
-    'anxious':            'stressed',
-    'nervous':            'stressed',
-    'tense':              'stressed',
-    'on edge':            'stressed',
-    'wound up':           'stressed',
-    'worked up':          'stressed',
-    'freaking out':       'stressed',
-    'panicky':            'stressed',
-    'restless':           'stressed',
-
-    // Frustrated variants
-    'annoyed':            'frustrated',
-    'irritated':          'frustrated',
-    'fed up':             'frustrated',
-    'agitated':           'frustrated',
-    'upset':              'frustrated',
-    'pissed off':         'frustrated',
-
-    // Screen time variants
-    'phone':              'screen',
-    'smartphone':         'screen',
-    'tablet':             'screen',
-    'laptop':             'screen',
-    'computer':           'screen',
-    'tv':                 'screen',
-    'television':         'screen',
-    'device':             'screen',
-    'tiktok':             'screen',
-    'instagram':          'screen',
-    'youtube':            'screen',
-    'social media':       'screen',
-    'scrolling':          'screen',
-    'doomscrolling':      'screen',
-    'doom scrolling':     'screen',
-
-    // Nap variants
-    'siesta':             'nap',
-    'power nap':          'nap',
-    'afternoon sleep':    'nap',
-    'daytime sleep':      'nap',
-    'midday sleep':       'nap',
-    'catnap':             'nap',
-
-    // Routine variants
-    'wind down':          'bedtime routine',
-    'winding down':       'bedtime routine',
-    'pre sleep':          'bedtime routine',
-    'night routine':      'bedtime routine',
-    'evening routine':    'bedtime routine',
-    'before bed':         'bedtime routine',
-
-    // Duration variants
-    'hours of rest':      'hours of sleep',
-    'sleep time':         'sleep duration',
-    'rest time':          'sleep duration',
-    'sleeping hours':     'sleep duration',
-
-    // Wake time variants
-    'alarm':              'wake time',
-    'body clock':         'circadian',
-    'internal clock':     'circadian',
-    'circadian rhythm':   'circadian',
-    'sleep schedule':     'wake time',
-    'sleep pattern':      'wake time',
-    'social jetlag':      'wake time',
-
-    // General tips variants
-    'melatonin':          'sleep tips',
-    'white noise':        'sleep tips',
-    'sleep environment':  'sleep tips',
-    'bedroom':            'sleep tips',
-    'caffeine':           'sleep tips',
-    'alcohol':            'sleep tips',
-    'exercise':           'sleep tips',
+    'cannot sleep':        'cant sleep',
+    "can't sleep":         'cant sleep',
+    'falling asleep':      'cant sleep',
+    'fall asleep':         'cant sleep',
+    'trouble sleeping':    'cant sleep',
+    'insomnia':            'cant sleep',
+    'wide awake':          'cant sleep',
+    'lying awake':         'cant sleep',
+    'before bed':          'bedtime',
+    'wind down':           'bedtime routine',
+    'wind-down':           'bedtime routine',
+    'pre-sleep':           'bedtime routine',
+    'night routine':       'bedtime routine',
+    'phone before bed':    'screen time',
+    'blue light':          'screen time',
+    'scrolling':           'screen time',
+    'social media':        'screen time',
+    'power nap':           'nap',
+    'daytime sleep':       'nap',
+    'afternoon nap':       'nap',
+    'how many hours':      'sleep duration',
+    'how long should':     'sleep duration',
+    'hours of sleep':      'sleep duration',
+    'wake up time':        'wake time',
+    'alarm time':          'wake time',
+    'morning routine':     'wake time',
+    'sleep advice':        'sleep tips',
+    'sleep hygiene':       'sleep tips',
+    'better sleep':        'sleep tips',
+    'improve sleep':       'sleep tips',
+    'anxious':             'stressed',
+    'anxiety':             'stressed',
+    'overthinking':        'stressed',
+    'racing thoughts':     'stressed',
+    'mind won\'t stop':    'stressed',
+    'exhausted':           'tired',
+    'drained':             'tired',
+    'fatigue':             'tired',
+    'wiped out':           'tired',
+    'frustrated':          'frustrated',
+    'annoyed':             'frustrated',
+    'angry':               'frustrated',
+    'fed up':              'frustrated',
+    'thanks':              'thank you',
+    'thank you':           'gratitude',
+    'cheers':              'gratitude',
+    'appreciate':          'gratitude',
+    'yes':                 'affirmation',
+    'yeah':                'affirmation',
+    'sure':                'affirmation',
+    'ok':                  'affirmation',
+    'okay':                'affirmation',
+    'yep':                 'affirmation',
+    'no':                  'negation',
+    'nope':                'negation',
+    'nah':                 'negation',
+    'not really':          'negation',
+    'repeat':              'repeat',
+    'say again':           'repeat',
+    'what did you say':    'repeat',
   };
 
-  // ════════════════════════════════════════════════════════════════
-  // IMPROVEMENT 2 — NEGATION AWARENESS
-  // If any of these prefixes immediately precede an intent keyword,
-  // that intent's score is penalised in the engine.
-  // ════════════════════════════════════════════════════════════════
-  static const List<String> negationPrefixes = [
-    "don't want",
-    "dont want",
-    "do not want",
-    "not looking for",
-    "don't need",
-    "dont need",
-    "do not need",
-    "no need for",
-    "not interested in",
-    "not asking about",
-    "i don't want",
-    "i dont want",
-    "i do not want",
-    "without",
-    "not about",
-    "nothing about",
-    "stop talking about",
-    "skip",
-    "forget",
-    "ignore",
-    "not",
-    "no",
-  ];
+  static const Map<SleepIntent, List<String>> intentKeywords = {
+    SleepIntent.cantSleep: [
+      'cant sleep', 'sleep', 'awake', 'fall asleep', 'asleep',
+      'lying in bed', '20 minute', 'wired', 'alert at night',
+    ],
+    SleepIntent.bedtimeRoutine: [
+      'bedtime', 'routine', 'wind down', 'before bed', 'pre-sleep',
+      'night routine', 'schedule', 'prepare for sleep',
+    ],
+    SleepIntent.screenTime: [
+      'screen time', 'phone', 'blue light', 'scrolling', 'device',
+      'tv before bed', 'laptop', 'tablet', 'social media',
+    ],
+    SleepIntent.nap: [
+      'nap', 'napping', 'daytime sleep', 'power nap', 'afternoon sleep',
+      'siesta', 'sleep during day',
+    ],
+    SleepIntent.sleepDuration: [
+      'sleep duration', 'how many hours', 'enough sleep', 'hours of sleep',
+      'how long', 'sleep debt', 'oversleeping', 'too much sleep',
+    ],
+    SleepIntent.wakeTime: [
+      'wake time', 'wake up', 'alarm', 'morning', 'get up',
+      'consistent wake', 'same time', 'circadian',
+    ],
+    SleepIntent.sleepTips: [
+      'tips', 'advice', 'help', 'improve', 'sleep hygiene',
+      'better sleep', 'suggestions', 'habits',
+    ],
+    SleepIntent.stressed: [
+      'stressed', 'stress', 'anxious', 'anxiety', 'overthinking',
+      'racing thoughts', 'worried', 'mind won\'t stop', 'cant relax',
+    ],
+    SleepIntent.tired: [
+      'tired', 'exhausted', 'drained', 'fatigue', 'wiped',
+      'no energy', 'sleepy', 'drowsy',
+    ],
+    SleepIntent.frustrated: [
+      'frustrated', 'annoyed', 'angry', 'fed up', 'nothing works',
+      'tried everything', 'gives up', 'useless',
+    ],
+    SleepIntent.greeting: [
+      'hello', 'hi', 'hey', 'good morning', 'good evening', 'howdy',
+    ],
+    SleepIntent.gratitude: [
+      'gratitude', 'thank', 'thanks', 'appreciate', 'helpful',
+    ],
+    SleepIntent.help: [
+      'what can you do', 'what do you know', 'help me', 'how do you work',
+      'what topics', 'what can you help',
+    ],
+    SleepIntent.affirmation: [
+      'affirmation', 'yes', 'yeah', 'sure', 'ok', 'okay', 'yep',
+      'go ahead', 'please do', 'sounds good',
+    ],
+    SleepIntent.negation: [
+      'negation', 'no', 'nope', 'nah', 'not really', 'no thanks',
+      'skip', 'never mind',
+    ],
+    SleepIntent.repeat: [
+      'repeat', 'say again', 'what did you say', 'pardon', 'come again',
+    ],
+  };
 
-  // ════════════════════════════════════════════════════════════════
-  // IMPROVEMENT 2 (cont.) — N-GRAM KEYWORD MAP
-  // 2- and 3-word phrases. Stored separately from unigrams.
-  // Engine weights these: bigram = ×2, trigram = ×3.
-  // This allows precise phrases to dominate over accidental
-  // single-word collisions.
-  // ════════════════════════════════════════════════════════════════
-
-  /// Bigrams (2-word phrases) — weight ×2 in engine scoring.
   static const Map<SleepIntent, List<String>> bigrams = {
     SleepIntent.cantSleep: [
-      'cant sleep',
-      'cannot sleep',
-      'trouble sleeping',
-      'lying awake',
-      'no sleep',
-      'wide awake',
-      'sleepless night',
-      'racing thoughts',
-      'tossing turning',
-      'sleep deprivation',
-      'restless night',
-      'keep waking',
-    ],
-    SleepIntent.screenTime: [
-      'screen time',
-      'blue light',
-      'phone bed',
-      'scroll bed',
-      'screen bed',
-      'device bed',
+      'cant sleep', 'cant fall', 'stay awake', 'wide awake', 'lying awake',
     ],
     SleepIntent.bedtimeRoutine: [
-      'bedtime routine',
-      'night routine',
-      'wind down',
-      'pre sleep',
-      'sleep routine',
-      'before bed',
-      'going bed',
+      'bedtime routine', 'wind down', 'night routine', 'before sleep',
+    ],
+    SleepIntent.screenTime: [
+      'screen time', 'blue light', 'phone before', 'no screens',
     ],
     SleepIntent.nap: [
-      'power nap',
-      'short nap',
-      'quick nap',
-      'daytime sleep',
-      'afternoon nap',
-      'midday nap',
+      'power nap', 'short nap', 'daytime nap', 'afternoon nap',
     ],
     SleepIntent.sleepDuration: [
-      'how long',
-      'enough sleep',
-      'hours sleep',
-      'sleep debt',
-      'too little',
-      'not enough',
-      'sleep amount',
-      'how much',
+      'sleep duration', 'hours sleep', 'enough sleep', 'sleep debt',
     ],
     SleepIntent.wakeTime: [
-      'wake time',
-      'wake up',
-      'sleep schedule',
-      'body clock',
-      'circadian rhythm',
-      'sleep pattern',
-      'fix schedule',
+      'wake time', 'wake up', 'same time', 'consistent wake',
     ],
     SleepIntent.sleepTips: [
-      'sleep tips',
-      'sleep advice',
-      'sleep better',
-      'improve sleep',
-      'sleep hygiene',
-      'sleep quality',
-      'good sleep',
-      'sleep hacks',
-      'give me',
-      'show me',
-      'tell me',
-      'any tips',
-      'any advice',
-      'how can',
-      'how do',
-      'what can',
-      'what should',
-      'help me',
+      'sleep tips', 'sleep advice', 'sleep hygiene', 'better sleep',
     ],
     SleepIntent.stressed: [
-      'mind racing',
-      'cant relax',
-      'too stressed',
-      'on edge',
-      'wound up',
+      'racing thoughts', 'cant relax', 'mind racing', 'feel anxious',
     ],
     SleepIntent.tired: [
-      'so tired',
-      'no energy',
-      'dead tired',
-      'worn out',
-      'running empty',
+      'so tired', 'really tired', 'always tired', 'feel exhausted',
     ],
     SleepIntent.frustrated: [
-      'nothing works',
-      'nothing helps',
-      'give up',
-      'sick of',
-      'fed up',
-      'why cant',
-    ],
-    SleepIntent.greeting: [
-      'good morning',
-      'good evening',
-      'good night',
-      'whats up',
-    ],
-    SleepIntent.help: [
-      'what can',
-      'how does',
-      'what do',
-      'show me',
-      'guide me',
+      'nothing works', 'so frustrated', 'tried everything', 'fed up',
     ],
   };
 
-  /// Trigrams (3-word phrases) — weight ×3 in engine scoring.
   static const Map<SleepIntent, List<String>> trigrams = {
     SleepIntent.cantSleep: [
-      'cant fall asleep',
-      'unable to sleep',
-      'lying in bed',
-      'staring at ceiling',
-      'middle of night',
-      'been awake all',
-      'trouble falling asleep',
-      'cant stop thinking',
-      'mind wont stop',
-      'sleep wont come',
-    ],
-    SleepIntent.screenTime: [
-      'phone before bed',
-      'screen before bed',
-      'laptop before bed',
-      'social media night',
-      'blue light glasses',
-      'screen affects sleep',
-      'tv in bedroom',
+      'cant fall asleep', 'lying awake all', 'mind wont stop',
     ],
     SleepIntent.bedtimeRoutine: [
-      'prepare for sleep',
-      'ready for bed',
-      'what to do before',
-      'calm down before sleep',
-      'routine for sleep',
-      'habits before bed',
+      'bedtime wind down routine', 'routine before bed',
     ],
-    SleepIntent.sleepDuration: [
-      'how many hours',
-      'how much sleep',
-      'how long sleep',
-      'recommended sleep hours',
-      'catching up sleep',
-      'not enough sleep',
-      'sleeping too much',
-      'sleeping too little',
-    ],
-    SleepIntent.wakeTime: [
-      'same wake time',
-      'fix sleep schedule',
-      'reset sleep cycle',
-      'consistent wake time',
-      'hard to wake',
-      'sleeping through alarm',
-      'waking up early',
-    ],
-    SleepIntent.stressed: [
-      'too much on mind',
-      'cant stop worrying',
-      'mind is racing',
-      'so much stress',
-    ],
-    SleepIntent.tired: [
-      'cant keep eyes open',
-      'running on empty',
-      'no energy left',
-    ],
-    SleepIntent.frustrated: [
-      'why cant i sleep',
-      'nothing is working',
-      'i give up',
-      'sick of this',
-      'this isnt working',
-    ],
-  };
-
-  // ── Intent keyword map (unigrams) ────────────────────────────
-  static const Map<SleepIntent, List<String>> intentKeywords = {
-    SleepIntent.greeting: [
-      'hi', 'hello', 'hey', 'howdy', 'greetings', 'sup', 'hiya',
-    ],
-
-    SleepIntent.gratitude: [
-      'thanks', 'thank you', 'cheers', 'appreciate',
-      'helpful', 'great help',
-    ],
-
-    SleepIntent.repeat: [
-      'repeat', 'again', 'pardon', 'once more',
-      'missed that', 'didnt catch',
-    ],
-
-    SleepIntent.help: [
-      'help', 'options', 'commands', 'features', 'capabilities',
-      'what can you do', 'how does this work', 'how can you help',
-      'how do you work', 'what are you', 'how can you',
-    ],
-
-    SleepIntent.affirmation: [
-      'yes', 'yeah', 'yep', 'yup', 'sure', 'okay', 'ok',
-      'alright', 'absolutely', 'definitely', 'please', 'continue',
-    ],
-
-    SleepIntent.negation: [
-      'no', 'nope', 'nah', 'never mind', 'nevermind',
-      'not interested', 'forget it', 'maybe later',
-    ],
-
-    SleepIntent.cantSleep: [
-      'sleep', 'awake', 'asleep', 'insomnia',
-      'sleepless', 'restless', 'tossing', 'turning',
-      'waking', 'woke', 'tired', 'dreaming',
-    ],
-
     SleepIntent.screenTime: [
-      'screen', 'phone', 'blue light', 'scroll',
-      'social media', 'tiktok', 'instagram', 'youtube',
-      'doomscrolling', 'device', 'tablet', 'laptop', 'tv',
+      'phone before bed', 'screen time before bed',
     ],
-
-    SleepIntent.bedtimeRoutine: [
-      'routine', 'ritual', 'habit', 'wind down',
-      'prepare', 'ready', 'bedtime', 'night',
-    ],
-
-    SleepIntent.nap: [
-      'nap', 'napping', 'siesta', 'daytime', 'afternoon',
-      'midday', 'catnap', 'lunchtime',
-    ],
-
-    SleepIntent.sleepDuration: [
-      'hours', 'duration', 'long', 'much', 'enough',
-      'debt', 'requirement', 'amount', 'optimal',
-    ],
-
-    SleepIntent.wakeTime: [
-      'wake', 'alarm', 'morning', 'circadian',
-      'schedule', 'pattern', 'rhythm', 'clock',
-    ],
-
     SleepIntent.sleepTips: [
-      'tips', 'advice', 'better', 'improve', 'hygiene',
-      'quality', 'habits', 'suggestions', 'hacks',
-      'caffeine', 'alcohol', 'melatonin', 'exercise',
-      'dark', 'cool', 'quiet', 'noise',
+      'tips for better sleep', 'help me sleep better',
     ],
-
     SleepIntent.stressed: [
-      'stressed', 'stress', 'overwhelmed', 'anxious',
-      'worried', 'worrying', 'tense', 'nervous', 'restless',
-    ],
-
-    SleepIntent.tired: [
-      'tired', 'exhausted', 'drained', 'fatigued',
-      'sleepy', 'drowsy', 'energy', 'burnout',
-    ],
-
-    SleepIntent.frustrated: [
-      'frustrated', 'annoyed', 'irritated', 'fed up',
-      'angry', 'annoying', 'hate', 'sick',
+      'too stressed to sleep', 'anxiety keeping me awake',
     ],
   };
 
-  // ── Emotional tone keyword map ────────────────────────────────
   static const Map<EmotionalTone, List<String>> toneKeywords = {
     EmotionalTone.stressed: [
-      'stressed', 'overwhelmed', 'anxious', 'worried', 'worrying',
-      'on edge', 'tense', 'wound up', 'mind is racing',
+      'stressed', 'anxious', 'anxiety', 'overwhelmed', 'worried',
+      'racing thoughts', 'overthinking', 'panic',
     ],
     EmotionalTone.tired: [
-      'tired', 'exhausted', 'drained', 'worn out', 'fatigued',
-      'sleepy', 'drowsy', 'burned out', 'no energy',
+      'tired', 'exhausted', 'drained', 'fatigue', 'sleepy',
+      'wiped out', 'no energy', 'drowsy',
     ],
     EmotionalTone.frustrated: [
-      'frustrated', 'annoyed', 'fed up', 'nothing works',
-      'nothing helps', 'i give up', 'sick of this',
+      'frustrated', 'annoyed', 'angry', 'fed up', 'nothing works',
+      'tried everything', 'useless',
     ],
   };
 
-  // ════════════════════════════════════════════════════════════════
-  // 3. RESPONSE VARIANTS
-  // ════════════════════════════════════════════════════════════════
-
-  static const Map<SleepIntent, List<String>> responseVariants = {
-    SleepIntent.greeting: [
-      "Hello! I'm your sleep assistant. You can ask me about bedtime routines, "
-          "why you can't sleep, screen time habits, naps, or general sleep tips.",
-      "Hey there! Ready to help with your sleep. What's on your mind — "
-          "trouble falling asleep, a bedtime routine, or something else?",
-      "Hi! I'm here to help you sleep better. Ask me anything about sleep hygiene, "
-          "routines, naps, or what to do when your mind won't switch off.",
-    ],
-
-    SleepIntent.gratitude: [
-      "You're welcome! Sleep well tonight.",
-      "Glad that helped. Feel free to ask anything else.",
-      "Of course! Come back anytime you need sleep support.",
-      "Happy to help. Wishing you a restful night.",
-    ],
-
-    SleepIntent.help: [
-      "Here's what I can help with: trouble falling asleep, bedtime routines, "
-          "screen time before bed, nap advice, how many hours of sleep you need, "
-          "and fixing your wake time. Just ask naturally.",
-      "You can ask me things like: 'I can't sleep', 'give me a bedtime routine', "
-          "'is napping bad?', 'how much sleep do I need?', or 'help with screen time'.",
-      "I specialise in sleep hygiene. Try asking about: insomnia, bedtime wind-down, "
-          "blue light, power naps, sleep duration, or wake schedules.",
-    ],
-
-    SleepIntent.affirmation: [
-      "Great, let's continue.",
-      "Alright, here we go.",
-      "Sure thing.",
-      "Okay, I'll go ahead.",
-    ],
-
-    SleepIntent.negation: [
-      "No problem, let me know if there's anything else.",
-      "Alright, I'm here whenever you need me.",
-      "Got it. Just say the word if you'd like help with something.",
-    ],
-
-    SleepIntent.unknown: [
-      "I didn't quite catch that. Try asking about trouble sleeping, "
-          "a bedtime routine, screen time, naps, or sleep duration.",
-      "Not sure I understood. You can say things like 'I can't sleep' "
-          "or 'give me sleep tips' and I'll help.",
-      "Could you rephrase that? I'm best with questions about sleep — "
-          "routines, insomnia, naps, wake times, and screen habits.",
-      "I didn't get that one. Ask me about bedtime routines, "
-          "why you can't sleep, or how much sleep you need.",
-    ],
-  };
-
-  // ── Tone-adapted prefixes ─────────────────────────────────────
   static const Map<EmotionalTone, List<String>> tonePrefixes = {
     EmotionalTone.stressed: [
       "It sounds like your mind is really busy right now. Let's slow things down. ",
@@ -708,327 +646,320 @@ class SleepCorpus {
     ],
   };
 
-  // ── Contextual follow-up suggestions ─────────────────────────
-  static const Map<SleepIntent, List<String>> followUpSuggestions = {
+  // ── Response variant lists (used by engine's _buildResponse) ─────────────
+
+  static final Map<SleepIntent, List<String>> intentMessages = {
     SleepIntent.cantSleep: [
-      "Try a breathing exercise",
-      "Give me a bedtime routine",
-      "Tips on screen time",
+      all['sleep.cantSleep.0']!,
+      all['sleep.cantSleep.1']!,
+      all['sleep.cantSleep.2']!,
     ],
     SleepIntent.bedtimeRoutine: [
-      "What about screen time?",
-      "How many hours do I need?",
-      "Help, I still can't sleep",
+      all['sleep.bedtimeRoutine.0']!,
+      all['sleep.bedtimeRoutine.1']!,
+      all['sleep.bedtimeRoutine.2']!,
     ],
     SleepIntent.screenTime: [
-      "Give me a bedtime routine",
-      "I still can't sleep",
-      "Tell me about blue light",
+      all['sleep.screenTime.0']!,
+      all['sleep.screenTime.1']!,
+      all['sleep.screenTime.2']!,
     ],
     SleepIntent.nap: [
-      "What's the best wake time?",
-      "How much sleep do I need?",
-      "General sleep tips",
+      all['sleep.nap.0']!,
+      all['sleep.nap.1']!,
+      all['sleep.nap.2']!,
     ],
     SleepIntent.sleepDuration: [
-      "Help me fix my wake time",
-      "I can't sleep anyway",
-      "Give me sleep tips",
+      all['sleep.sleepDuration.0']!,
+      all['sleep.sleepDuration.1']!,
+      all['sleep.sleepDuration.2']!,
     ],
     SleepIntent.wakeTime: [
-      "Give me a bedtime routine",
-      "How much sleep do I need?",
-      "General sleep tips",
+      all['sleep.wakeTime.0']!,
+      all['sleep.wakeTime.1']!,
+      all['sleep.wakeTime.2']!,
     ],
     SleepIntent.sleepTips: [
-      "I can't sleep tonight",
-      "Give me a bedtime routine",
-      "What about naps?",
+      all['sleep.sleepTips.0']!,
+      all['sleep.sleepTips.1']!,
+      all['sleep.sleepTips.2']!,
     ],
     SleepIntent.stressed: [
-      "Try a breathing exercise",
-      "Give me a bedtime routine",
-      "Tips for racing thoughts",
+      all['sleep.stressed.0']!,
+      all['sleep.stressed.1']!,
+      all['sleep.stressed.2']!,
     ],
     SleepIntent.tired: [
-      "How much sleep do I need?",
-      "Give me sleep tips",
-      "Fix my sleep schedule",
+      all['sleep.tired.0']!,
+      all['sleep.tired.1']!,
+      all['sleep.tired.2']!,
     ],
     SleepIntent.frustrated: [
-      "What actually works for sleep?",
-      "Try a bedtime routine",
-      "Help me with screen time",
+      all['sleep.frustrated.0']!,
+      all['sleep.frustrated.1']!,
+      all['sleep.frustrated.2']!,
     ],
   };
 
-  // ── Tips ─────────────────────────────────────────────────────
+  static final Map<SleepIntent, List<String>> responseVariants = {
+    SleepIntent.greeting: [
+      all['sleep.greeting.0']!,
+      all['sleep.greeting.1']!,
+      all['sleep.greeting.2']!,
+    ],
+    SleepIntent.gratitude: [
+      all['sleep.gratitude.0']!,
+      all['sleep.gratitude.1']!,
+      all['sleep.gratitude.2']!,
+      all['sleep.gratitude.3']!,
+    ],
+    SleepIntent.help: [
+      all['sleep.help.0']!,
+      all['sleep.help.1']!,
+      all['sleep.help.2']!,
+    ],
+    SleepIntent.affirmation: [
+      all['sleep.affirmation.0']!,
+      all['sleep.affirmation.1']!,
+      all['sleep.affirmation.2']!,
+      all['sleep.affirmation.3']!,
+    ],
+    SleepIntent.negation: [
+      all['sleep.negation.0']!,
+      all['sleep.negation.1']!,
+      all['sleep.negation.2']!,
+    ],
+    SleepIntent.unknown: [
+      all['sleep.unknown.0']!,
+      all['sleep.unknown.1']!,
+      all['sleep.unknown.2']!,
+      all['sleep.unknown.3']!,
+    ],
+  };
+
+  // ── Tips ──────────────────────────────────────────────────────────────────
+
   static const Map<SleepIntent, List<SleepTip>> intentTips = {
     SleepIntent.cantSleep: [
       SleepTip(
         emoji: '🌬️',
-        title: '4-7-8 breathing',
-        body: 'Inhale 4 sec, hold 7, exhale 8. Repeat 3 times. '
+        title: '4-7-8 Breathing',
+        body: 'Inhale 4s, hold 7s, exhale 8s. Repeat 3 times. '
             'Activates your parasympathetic nervous system immediately.',
       ),
       SleepTip(
-        emoji: '🧠',
-        title: '20-minute rule',
-        body: 'Lying awake trains your brain to associate bed with wakefulness. '
+        emoji: '🛏️',
+        title: '20-Minute Rule',
+        body: "Lying awake trains your brain to associate bed with wakefulness. "
             'Get up after 20 minutes and do something quiet.',
       ),
       SleepTip(
         emoji: '❄️',
-        title: 'Cool your room',
-        body: 'Core body temp must drop to trigger sleep. '
-            'Aim for 16–19°C (60–67°F).',
+        title: 'Cool Your Room',
+        body: 'Core body temperature must drop to trigger sleep. '
+            'Aim for 16–19°C.',
       ),
     ],
-
     SleepIntent.screenTime: [
       SleepTip(
-        emoji: '🔅',
-        title: 'Enable night mode',
-        body: 'Use Night Shift (iOS) or Night Light (Android) '
+        emoji: '🌙',
+        title: 'Enable Night Mode',
+        body: 'Use Night Shift (iPhone) or Night Light (Android) '
             'if you must use your phone.',
       ),
       SleepTip(
-        emoji: '📚',
-        title: 'Replace with reading',
+        emoji: '📖',
+        title: 'Replace With Reading',
         body: 'A physical book relaxes your eyes and slows your thoughts — '
             'the best screen substitute.',
       ),
       SleepTip(
         emoji: '🔌',
-        title: 'Charge outside the bedroom',
-        body: 'If your phone is on your nightstand, you will check it. '
+        title: 'Charge Outside the Bedroom',
+        body: "If your phone is on your nightstand, you will check it. "
             'Charge it in another room.',
       ),
     ],
-
     SleepIntent.nap: [
       SleepTip(
         emoji: '⏱️',
-        title: 'Keep it 10–20 minutes',
-        body: 'Short naps boost alertness without deep sleep, '
+        title: 'Keep It 10–20 Minutes',
+        body: "Short naps boost alertness without deep sleep, "
             'so you wake refreshed, not groggy.',
       ),
       SleepTip(
         emoji: '🕒',
-        title: 'Nap before 3 PM',
+        title: 'Nap Before 3 PM',
         body: 'Late naps reduce sleep pressure, '
             'making it harder to fall asleep at night.',
       ),
       SleepTip(
         emoji: '☕',
-        title: 'Caffeine nap trick',
-        body: 'Drink coffee right before a 20-min nap. '
+        title: 'Caffeine Nap Trick',
+        body: 'Drink coffee right before a 20-minute nap. '
             'Caffeine kicks in as you wake — double boost.',
       ),
     ],
-
     SleepIntent.sleepDuration: [
       SleepTip(
-        emoji: '📊',
-        title: 'Sleep needs by age',
-        body: 'Adults 18–64: 7–9 hrs · Adults 65+: 7–8 hrs · '
-            'Teens 14–17: 8–10 hrs.',
+        emoji: '🧬',
+        title: 'Sleep Needs by Age',
+        body: 'Adults 18–64: 7–9 hrs. '
+            'Adults 65+: 7–8 hrs. Teens 14–17: 8–10 hrs.',
       ),
       SleepTip(
-        emoji: '⚡',
-        title: 'Sleep debt is real',
+        emoji: '💳',
+        title: 'Sleep Debt is Real',
         body: "You can't fully recover lost sleep. "
             'Chronic short sleep impairs cognition and immunity.',
       ),
     ],
-
     SleepIntent.wakeTime: [
       SleepTip(
         emoji: '☀️',
-        title: 'Morning light first',
+        title: 'Morning Light First',
         body: '5–10 minutes of sunlight within an hour of waking '
             'resets your circadian clock for the day.',
       ),
       SleepTip(
-        emoji: '⏰',
-        title: 'Same time on weekends',
+        emoji: '📅',
+        title: 'Same Time on Weekends',
         body: 'Social jetlag from sleeping in disrupts your rhythm '
             'just like real jetlag.',
       ),
     ],
-
     SleepIntent.sleepTips: [
       SleepTip(
         emoji: '☕',
-        title: 'Cut caffeine at 2 PM',
-        body: 'Caffeine has a 5-hr half-life. '
-            'A 4 PM coffee means half is still active at 9 PM.',
+        title: 'Cut Caffeine at 2 PM',
+        body: "Caffeine has a 5-hour half-life. "
+            "A 4 PM coffee means half is still active at 9 PM.",
       ),
       SleepTip(
         emoji: '🌡️',
-        title: 'Cool, dark, quiet',
-        body: 'Ideal environment: 16–19°C, blackout curtains, '
-            'white noise if needed.',
+        title: 'Cool, Dark, Quiet',
+        body: 'Ideal: 16–19°C, blackout curtains, white noise if needed.',
       ),
       SleepTip(
         emoji: '🏃',
-        title: 'Exercise — but not late',
+        title: 'Exercise, But Not Late',
         body: 'Regular exercise improves sleep quality significantly. '
             'Avoid intense workouts within 2 hours of bedtime.',
       ),
       SleepTip(
         emoji: '🍷',
-        title: 'Alcohol disrupts sleep',
+        title: 'Alcohol Disrupts Sleep',
         body: 'Alcohol helps you fall asleep but fragments sleep '
             'in the second half of the night.',
       ),
     ],
-
     SleepIntent.stressed: [
       SleepTip(
         emoji: '📝',
-        title: 'Brain dump',
+        title: 'Brain Dump',
         body: 'Write every worry on paper before bed. '
             'Externalising thoughts reduces mental load.',
       ),
       SleepTip(
-        emoji: '🌬️',
-        title: 'Box breathing',
+        emoji: '📦',
+        title: 'Box Breathing',
         body: 'Inhale 4, hold 4, exhale 4, hold 4. '
-            'Repeat 4 cycles. Used by military to calm under pressure.',
+            'Repeat 4 cycles. Used by the military to calm under pressure.',
       ),
     ],
-
     SleepIntent.tired: [
       SleepTip(
-        emoji: '🕗',
-        title: 'Prioritise consistency',
+        emoji: '🔁',
+        title: 'Prioritise Consistency',
         body: 'Same bedtime every night matters more than total hours. '
             'Pick a time and protect it.',
       ),
       SleepTip(
         emoji: '💧',
-        title: 'Check hydration',
-        body: 'Dehydration causes fatigue. Drink water through the day, '
-            'not just at night.',
+        title: 'Check Hydration',
+        body: 'Dehydration causes fatigue. '
+            'Drink water through the day, not just at night.',
       ),
     ],
-
     SleepIntent.frustrated: [
       SleepTip(
-        emoji: '🧘',
-        title: 'Stop trying to sleep',
-        body: 'Paradoxical intention: try to stay awake with eyes closed. '
-            'Removes performance anxiety around sleep.',
+        emoji: '🔄',
+        title: 'Paradoxical Intention',
+        body: 'Try to stay awake with eyes closed. '
+            'This removes performance anxiety around sleep.',
       ),
       SleepTip(
         emoji: '🛏️',
-        title: 'Bed is only for sleep',
+        title: 'Bed is Only for Sleep',
         body: 'No phones, TV, or work in bed. '
-            'Train your brain that bed = sleep.',
+            'Train your brain that bed equals sleep.',
       ),
     ],
   };
 
-  // ── Routine steps ─────────────────────────────────────────────
+  // ── Bedtime routine steps (display only) ─────────────────────────────────
+
   static const List<String> bedtimeRoutineSteps = [
-    'T-30 min — Dim all lights in your room',
-    'T-25 min — Put your phone in another room',
-    'T-20 min — Light stretching or gentle yoga (5 min)',
-    'T-15 min — Warm shower or wash your face',
-    'T-10 min — Read a physical book or journal',
-    'T-0       — Lights off, eyes closed',
+    '30 min before — dim all lights',
+    '25 min before — put your phone in another room',
+    '20 min before — light stretching for 5 minutes',
+    '15 min before — warm shower or wash your face',
+    '10 min before — read a physical book or journal',
+    'Lights off, eyes closed',
   ];
 
-  // ── Main intent response messages ─────────────────────────────
-  static const Map<SleepIntent, List<String>> intentMessages = {
+  // ── Follow-up suggestions ─────────────────────────────────────────────────
+
+  static const Map<SleepIntent, List<String>> followUpSuggestions = {
     SleepIntent.cantSleep: [
-      "Struggling to sleep is really tough. Try the 20-minute rule: "
-          "if you're awake for more than 20 minutes, get up, do something "
-          "quiet in dim light, then return when you feel sleepy.",
-      "When sleep won't come, the worst thing is lying there fighting it. "
-          "Get up, reset, and come back to bed when your body is ready.",
-      "Racing thoughts at night are common. The key is to stop trying to force sleep "
-          "— your brain needs to feel safe, not pressured.",
+      "Try a breathing exercise",
+      "Give me more tips",
+      "What about screen time?",
     ],
-
     SleepIntent.bedtimeRoutine: [
-      "A consistent wind-down routine trains your brain to expect sleep. "
-          "Here's a simple 30-minute plan for tonight.",
-      "Your pre-sleep routine is a signal to your nervous system. "
-          "The same steps each night build a powerful sleep association.",
-      "Routines work because they're predictable. Here's one to try tonight.",
+      "What about screen time?",
+      "How many hours do I need?",
+      "Tips for falling asleep faster",
     ],
-
     SleepIntent.screenTime: [
-      "Blue light from screens tells your brain it's daytime, "
-          "suppressing melatonin for up to 3 hours. "
-          "Aim to put devices away 30–60 minutes before bed.",
-      "Every scroll before bed delays your melatonin release. "
-          "Even 30 minutes screen-free makes a measurable difference.",
-      "Screens are the biggest modern enemy of sleep. "
-          "The content also keeps your brain alert — not just the light.",
+      "Give me a bedtime routine",
+      "What else can I do?",
+      "Tell me about sleep duration",
     ],
-
     SleepIntent.nap: [
-      "Naps can be great or harmful depending on how you use them. "
-          "The key is keeping them short and early.",
-      "A well-timed nap is one of the most effective performance tools. "
-          "A badly timed one can ruin your night.",
-      "The science on naps is clear: 10–20 minutes before 3 PM is the sweet spot.",
+      "How long should I sleep at night?",
+      "Tell me about wake time",
+      "More sleep tips",
     ],
-
     SleepIntent.sleepDuration: [
-      "Most adults need 7–9 hours. Consistency matters more than total hours — "
-          "the same bedtime every night resets your internal clock.",
-      "Sleep needs vary by person, but the 7–9 hour range covers most adults. "
-          "Quality matters as much as quantity.",
-      "There's no real way to 'catch up' on sleep. "
-          "Chronic short sleep compounds over time.",
+      "What time should I wake up?",
+      "Help with bedtime routine",
+      "I can't fall asleep",
     ],
-
     SleepIntent.wakeTime: [
-      "A fixed wake time is the single most powerful sleep habit. "
-          "Even on weekends, stay within 30 minutes of your usual time.",
-      "Your wake time anchors your entire sleep cycle. "
-          "Fixing it is more effective than fixing your bedtime.",
-      "Consistency at wake time sets your circadian rhythm. "
-          "Irregular wake times cause social jetlag.",
+      "Help with my bedtime routine",
+      "General sleep tips",
+      "Why can't I fall asleep?",
     ],
-
     SleepIntent.sleepTips: [
-      "Here are the most evidence-based sleep habits. "
-          "Pick just one to start — trying everything at once is overwhelming.",
-      "Good sleep hygiene comes down to a few key behaviours. "
-          "Here are the ones with the strongest evidence.",
-      "Sleep science is clear on what works. "
-          "Here are the top habits to build.",
+      "I can't fall asleep",
+      "Give me a bedtime routine",
+      "Help with screen time",
     ],
-
     SleepIntent.stressed: [
-      "Stress activates your fight-or-flight response — "
-          "the opposite of what sleep needs. Let's work on calming your system.",
-      "A stressed mind needs a physical reset before it can sleep. "
-          "Here's what actually works.",
-      "When your mind is overloaded, sleep feels impossible. "
-          "Let's change that.",
+      "Try breathing exercises",
+      "Give me sleep tips",
+      "Help me wind down",
     ],
-
     SleepIntent.tired: [
-      "Being this tired and still not sleeping well is genuinely hard. "
-          "Let's figure out what's getting in the way.",
-      "Exhaustion without good sleep is a cycle we can break. "
-          "Here's where to start.",
-      "When you're drained, the basics matter most. Let's cover them.",
+      "Give me a bedtime routine",
+      "How many hours do I need?",
+      "I can't fall asleep",
     ],
-
     SleepIntent.frustrated: [
-      "Sleep frustration is real and valid. "
-          "The key is removing the performance pressure around sleep.",
-      "The more you try to force sleep, the harder it becomes. "
-          "Let's take a different approach.",
-      "I hear you — it's exhausting to be exhausted and still not sleep. "
-          "Here's a fresh angle.",
+      "Try something different",
+      "Tell me about sleep hygiene",
+      "Breathing exercises",
     ],
   };
 }
