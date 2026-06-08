@@ -265,3 +265,35 @@ const afternoonTheme = SkyTheme(
   celestialDuration:       Duration(hours: 3),
   nextPeriodIcon:          '🌙', // cycles to night
 );
+
+// ── 5. Image background  (app_background.png lavender palette) ─
+// Used whenever _isImageBackground = true so all UI elements
+// (bubbles, chips, mic, thinking pill) harmonise with the PNG
+// instead of inheriting the last active sky-period colours.
+const imageTheme = SkyTheme(
+  gradientColors: [Color(0xFFc8ceed), Color(0xFFdde1f7), Color(0xFFf0f2fc)],
+  gradientStops:  [0.0, 0.5, 1.0],
+  accentColor:    Color(0xFF3F51B5),
+  userBubble:    Color(0xFF9FA8DA),
+  assistBubble:  Color(0xFF9FA8DA),
+  chipBg:         Color(0xFF5C6BC0),
+  chipBorder:     Color(0xFF7986CB),
+  inputBg:        Color(0xFFFFFFFF),
+  inputFill:      Color(0xFFEEF0FB),
+  textPrimary:   Color(0xFFFFFFFF),
+  textSecondary: Color(0xFFFFFFFF),
+  nebulaColor1:   Color(0xFF9fa8da),
+  nebulaColor2:   Color(0xFF8d9dc8),
+  celestialEmoji:        '',
+  celestialSize:         0,
+  showSunHalo:           false,
+  showStars:             false,
+  cloudOpacityPrimary:   0,
+  cloudOpacitySecondary: 0,
+  showThirdCloud:        false,
+  showHorizonGlow:       false,
+  horizonGlowColor:      Color(0xFF000000),
+  horizonGlowOpacity:    0.0,
+  celestialDuration:     Duration(hours: 1),
+  nextPeriodIcon:        '',
+);

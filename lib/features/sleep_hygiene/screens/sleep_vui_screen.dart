@@ -36,6 +36,13 @@ class _SleepVuiScreenState extends ConsumerState<SleepVuiScreen>
   bool           _isManualOverride = false;
   Timer?         _overrideTimer;
   Timer?         _realTimeTimer;
+  bool _isImageBackground = true;
+  int            _syncPressCount = 0;
+
+  // ── Scroll-aware controls visibility ──────────────────────────
+  bool   _showControls      = true;
+  double _lastScrollOffset  = 0.0;
+  static const double _kScrollHideThreshold = 10.0;
 
   static const Duration _kOverrideDuration = Duration(minutes: 3);
 
@@ -45,29 +52,37 @@ class _SleepVuiScreenState extends ConsumerState<SleepVuiScreen>
   }
 
   void _toggleTheme() {
-    final actual    = computeSkyPeriod();
-    final newPeriod = _nextPeriod(_period);
-    setState(() => _period = newPeriod);
+    final actual = computeSkyPeriod();
 
-    if (newPeriod != actual) {
-      _isManualOverride = true;
-      _overrideTimer?.cancel();
-      _overrideTimer = Timer(_kOverrideDuration, _revertToRealTheme);
-
-      final snackTheme = themeForPeriod(newPeriod);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        backgroundColor: snackTheme.chipBg,
-        content: Text(
-          '${snackTheme.celestialEmoji} Preview: ${newPeriod.name} · reverts in 3 min',
-          style: TextStyle(color: snackTheme.textPrimary),
-        ),
-        duration: const Duration(seconds: 3),
-      ));
-    } else {
-      _isManualOverride = false;
-      _overrideTimer?.cancel();
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    // If on image background, enter sky system at real clock period
+    if (_isImageBackground) {
+      setState(() {
+        _isImageBackground = false;
+        _isManualOverride = false;
+        _period = actual;
+        _syncPressCount = 0; // reset counter on entry
+      });
+      return;
     }
+
+    // After 4 presses (full cycle through all 4 periods), return to image
+    _syncPressCount++;
+    if (_syncPressCount >= 4) {
+      setState(() {
+        _isImageBackground = true;
+        _syncPressCount = 0;
+      });
+      _overrideTimer?.cancel();
+      return;
+    }
+
+    // Cycle to next period
+    final newPeriod = _nextPeriod(_period);
+    setState(() {
+      _period = newPeriod;
+      _isManualOverride = newPeriod != actual;
+    });
+    _overrideTimer?.cancel();
   }
 
   void _revertToRealTheme() {
@@ -83,6 +98,20 @@ class _SleepVuiScreenState extends ConsumerState<SleepVuiScreen>
       ),
       duration: const Duration(seconds: 2),
     ));
+  }
+
+  // ── Scroll listener ────────────────────────────────────────────
+  void _onChatScroll() {
+    final offset = _scrollController.offset;
+    final delta  = offset - _lastScrollOffset;
+
+    if (delta.abs() < _kScrollHideThreshold) return;
+
+    final shouldShow = delta < 0; // scrolling up → show
+    if (shouldShow != _showControls) {
+      setState(() => _showControls = shouldShow);
+    }
+    _lastScrollOffset = offset;
   }
 
   @override
@@ -104,11 +133,13 @@ class _SleepVuiScreenState extends ConsumerState<SleepVuiScreen>
     );
 
     _realTimeTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      if (!_isManualOverride && mounted) {
+      if (!_isManualOverride && !_isImageBackground && mounted) {
         final actual = computeSkyPeriod();
         if (actual != _period) setState(() => _period = actual);
       }
     });
+
+    _scrollController.addListener(_onChatScroll);
   }
 
   @override
@@ -116,6 +147,7 @@ class _SleepVuiScreenState extends ConsumerState<SleepVuiScreen>
     _overrideTimer?.cancel();
     _realTimeTimer?.cancel();
     _pulseController.dispose();
+    _scrollController.removeListener(_onChatScroll);
     _scrollController.dispose();
     super.dispose();
   }
@@ -137,7 +169,7 @@ class _SleepVuiScreenState extends ConsumerState<SleepVuiScreen>
     final statusBarHeight = MediaQuery.of(context).padding.top;
     final state    = ref.watch(sleepVuiNotifierProvider);
     final notifier = ref.read(sleepVuiNotifierProvider.notifier);
-    final theme    = themeForPeriod(_period);
+    final theme    = _isImageBackground ? imageTheme : themeForPeriod(_period);
 
     ref.listen<SleepVuiState>(sleepVuiNotifierProvider, (prev, next) {
 
@@ -168,8 +200,13 @@ class _SleepVuiScreenState extends ConsumerState<SleepVuiScreen>
           }
         });
       }
+
       if (next.history.length != (prev?.history.length ?? 0)) {
         _scrollToBottom();
+        // Always reveal controls when a new message arrives
+        if (!_showControls) {
+          setState(() => _showControls = true);
+        }
       }
     });
 
@@ -177,6 +214,9 @@ class _SleepVuiScreenState extends ConsumerState<SleepVuiScreen>
     final bool isProcessing = state.status == SleepVuiStatus.processing;
     final bool isSpeaking   = state.status == SleepVuiStatus.speaking;
     final bool isBusy       = isListening || isProcessing || isSpeaking;
+
+    // Always keep controls visible while the VUI is active
+    final bool forceShowControls = _showControls || isBusy;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
@@ -195,226 +235,284 @@ class _SleepVuiScreenState extends ConsumerState<SleepVuiScreen>
           child: Stack(
             children: [
 
-              // ── 1a. Solid status bar fill ────────────────────────
-              // Exact sky top color — clouds cannot appear here
-              Positioned(
-                top: 0, left: 0, right: 0,
-                height: statusBarHeight,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 800),
-                  color: theme.gradientColors[0],
+              // ── Background: image OR sky ──────────────────────────
+              if (_isImageBackground)
+                Positioned.fill(
+                  child: Image.asset(
+                    'assets/images/app_background.png',
+                    fit: BoxFit.cover,
+                  ),
+                )
+              else ...[
+                // Status bar fill
+                Positioned(
+                  top: 0, left: 0, right: 0,
+                  height: statusBarHeight,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 800),
+                    color: theme.gradientColors[0],
+                  ),
                 ),
-              ),
-
-              // ── 1b. Sky background — clipped below status bar ────
-              Positioned(
-                top:    statusBarHeight,
-                left:   0,
-                right:  0,
-                bottom: 0,
-                child: _SkyBackground(
-                  scrollController: _scrollController,
-                  period:           _period,
+                // Sky animation
+                Positioned(
+                  top:    statusBarHeight,
+                  left:   0,
+                  right:  0,
+                  bottom: 0,
+                  child: _SkyBackground(
+                    scrollController: _scrollController,
+                    period:           _period,
+                  ),
                 ),
-              ),
+              ],
 
-              // ── 2. Safe area content ─────────────────────────────
+              // ── All UI content ────────────────────────────────────
               SafeArea(
                 child: Stack(
                   children: [
 
-                    // ── 1a. Solid status bar fill ────────────────────────
-                    Positioned(
-                      top: 0, left: 0, right: 0,
-                      height: statusBarHeight,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 800),
-                        color: theme.gradientColors[0],
+                    // ── Chat scroll area ────────────────────────────
+                    Positioned.fill(
+                      child: SingleChildScrollView(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.fromLTRB(16, 130, 16, 160),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+
+                            ...state.history.map((msg) => Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: _ChatBubble(
+                                text:        msg.text,
+                                isUser:      msg.isUser,
+                                theme:       theme,
+                                intentLabel: (!msg.isUser && msg.intent != null)
+                                    ? _intentLabel(msg.intent!, msg.confidence ?? 0)
+                                    : null,
+                              ),
+                            )),
+
+                            if (isProcessing || isSpeaking)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: _ThinkingPill(accentColor: const Color(0xFF3F51B5)),
+                                ),
+                              ),
+
+                            if (state.tips != null && state.tips!.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              ...state.tips!.map((t) =>
+                                  _SleepTipCard(tip: t, theme: theme)),
+                            ],
+
+                            if (state.routineSteps != null &&
+                                state.routineSteps!.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              _RoutineStepper(
+                                  steps: state.routineSteps!, theme: theme),
+                            ],
+
+                            if (state.suggestions != null &&
+                                state.suggestions!.isNotEmpty &&
+                                !isBusy) ...[
+                              const SizedBox(height: 12),
+                              _SuggestionChips(
+                                suggestions: state.suggestions!,
+                                theme:       theme,
+                                onTap: (s) => notifier.sendSuggestion(s),
+                              ),
+                            ],
+
+                            const SizedBox(height: 16),
+                          ],
+                        ),
                       ),
                     ),
 
-                    // ── 1b. Sky background — clipped below status bar ────
+                    // ── Bottom fade ─────────────────────────────────
                     Positioned(
-                      top:    statusBarHeight,
-                      left:   0,
-                      right:  0,
-                      bottom: 0,
-                      child: _SkyBackground(
-                        scrollController: _scrollController,
-                        period:           _period,
-                      ),
-                    ),
-
-                    // ── 2. Safe area content ─────────────────────────────
-                    SafeArea(
-                      child: Stack(
-                        children: [
-
-                          // ── Chat scrolls full height ───────────────────
-                          Positioned.fill(
-                            child: SingleChildScrollView(
-                              controller: _scrollController,
-                              padding: const EdgeInsets.fromLTRB(16, 130, 16, 140),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-
-                                  ...state.history.map((msg) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 10),
-                                    child: _ChatBubble(
-                                      text:        msg.text,
-                                      isUser:      msg.isUser,
-                                      theme:       theme,
-                                      intentLabel: (!msg.isUser && msg.intent != null)
-                                          ? _intentLabel(msg.intent!, msg.confidence ?? 0)
-                                          : null,
-                                    ),
-                                  )),
-
-                                  if (isProcessing || isSpeaking)
-                                    Padding(
-                                      padding: const EdgeInsets.only(bottom: 10),
-                                      child: Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: _ThinkingPill(accentColor: const Color(0xFF3F51B5)),
-                                      ),
-                                    ),
-
-                                  if (state.tips != null && state.tips!.isNotEmpty) ...[
-                                    const SizedBox(height: 6),
-                                    ...state.tips!.map((t) =>
-                                        _SleepTipCard(tip: t, theme: theme)),
-                                  ],
-
-                                  if (state.routineSteps != null &&
-                                      state.routineSteps!.isNotEmpty) ...[
-                                    const SizedBox(height: 6),
-                                    _RoutineStepper(
-                                        steps: state.routineSteps!, theme: theme),
-                                  ],
-
-                                  if (state.suggestions != null &&
-                                      state.suggestions!.isNotEmpty &&
-                                      !isBusy) ...[
-                                    const SizedBox(height: 12),
-                                    _SuggestionChips(
-                                      suggestions: state.suggestions!,
-                                      theme:       theme,
-                                      onTap: (s) => notifier.sendSuggestion(s),
-                                    ),
-                                  ],
-
-                                  const SizedBox(height: 16),
-                                ],
-                              ),
-                            ),
-                          ),
-
-                          // ── Bottom fade — content visible through it ───
-                          Positioned(
-                            bottom: 0, left: 0, right: 0,
-                            height: 140,
-                            child: IgnorePointer(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.bottomCenter,
-                                    end:   Alignment.topCenter,
-                                    stops: const [0.0, 0.6, 1.0],
-                                    colors: [
-                                      theme.gradientColors[0].withOpacity(0.92),
-                                      theme.gradientColors[0].withOpacity(0.45),
-                                      theme.gradientColors[0].withOpacity(0.0),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          // ── Header pinned at top ───────────────────────
-                          Positioned(
-                            top: 0, left: 0, right: 0,
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  IconButton(
-                                    onPressed: () => Navigator.of(context).pop(),
-                                    style: IconButton.styleFrom(
-                                      backgroundColor: theme.accentColor.withOpacity(0.2),
-                                      foregroundColor: theme.textPrimary,
-                                      shape: const CircleBorder(),
-                                    ),
-                                    icon: const Icon(Icons.arrow_back_rounded, size: 24),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Text(
-                                      'Sleep Hygiene',
-                                      style: TextStyle(
-                                        fontSize: 28,
-                                        fontWeight: FontWeight.bold,
-                                        color: theme.textPrimary,  // ← theme-aware
-                                      ),
-                                    ),
-                                  ),
-                                  _SkyControlButton(
-                                    icon:  Icons.sync_rounded,
-                                    onTap: _toggleTheme,
-                                    color: theme.accentColor,  // ← theme-aware
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-
-                          // ── Mic pinned at bottom center ────────────────
-                          Positioned(
-                            bottom: 24, left: 0, right: 0,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _MicButton(
-                                  isListening:   isListening,
-                                  isBusy:        isBusy,
-                                  pulseAnim:     _pulseAnim,
-                                  accentColor:   const Color(0xFF3F51B5),
-                                  onTap: () {
-                                    if (isListening) {
-                                      notifier.stopListening();
-                                    } else if (!isBusy) {
-                                      notifier.startVoiceTurn();
-                                    }
-                                  },
-                                ),
-                                if (state.status == SleepVuiStatus.error &&
-                                    state.errorMessage != null)
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                                    child: Container(
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: Colors.red.shade900.withOpacity(0.5),
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                            color: Colors.red.shade700.withOpacity(0.5)),
-                                      ),
-                                      child: Text(
-                                        state.errorMessage!,
-                                        style: TextStyle(
-                                            color: Colors.red.shade200, fontSize: 13),
-                                      ),
-                                    ),
-                                  ),
+                      bottom: 0, left: 0, right: 0,
+                      height: 160,
+                      child: IgnorePointer(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.bottomCenter,
+                              end:   Alignment.topCenter,
+                              stops: const [0.0, 0.6, 1.0],
+                              colors: _isImageBackground
+                                  ? [
+                                Colors.white.withOpacity(0.6),
+                                Colors.white.withOpacity(0.2),
+                                Colors.transparent,
+                              ]
+                                  : [
+                                theme.gradientColors[0].withOpacity(0.92),
+                                theme.gradientColors[0].withOpacity(0.45),
+                                Colors.transparent,
                               ],
                             ),
                           ),
-
-                        ],
+                        ),
                       ),
                     ),
+
+                    // ── Header ─────────────────────────────────────
+                    Positioned(
+                      top: 0, left: 0, right: 0,
+                      child: AnimatedSlide(
+                        offset: forceShowControls
+                            ? Offset.zero
+                            : const Offset(0, -1),
+                        duration: const Duration(milliseconds: 320),
+                        curve: Curves.easeInOut,
+                        child: AnimatedOpacity(
+                          opacity: forceShowControls ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 280),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                IconButton(
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: _isImageBackground
+                                        ? const Color(0xFF3F51B5)
+                                        : theme.accentColor.withOpacity(0.2),
+                                    foregroundColor: _isImageBackground
+                                        ? Colors.white
+                                        : theme.textPrimary,
+                                    shape: const CircleBorder(),
+                                  ),
+                                  icon: const Icon(Icons.arrow_back_rounded, size: 24),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Text(
+                                    'Sleep Hygiene',
+                                    style: TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.bold,
+                                      color: _isImageBackground
+                                          ? const Color(0xFF3F51B5)
+                                          : theme.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                                _SkyControlButton(
+                                  icon:  Icons.sync_rounded,
+                                  onTap: _toggleTheme,
+                                  color: _isImageBackground
+                                      ? const Color(0xFF3F51B5)
+                                      : theme.accentColor,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // ── Mic ────────────────────────────────────────
+                    Positioned(
+                      bottom: 24, left: 0, right: 0,
+                      child: AnimatedSlide(
+                        offset: forceShowControls
+                            ? Offset.zero
+                            : const Offset(0, 1),
+                        duration: const Duration(milliseconds: 320),
+                        curve: Curves.easeInOut,
+                        child: AnimatedOpacity(
+                          opacity: forceShowControls ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 280),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _MicButton(
+                                isListening:       isListening,
+                                isBusy:            isBusy,
+                                pulseAnim:         _pulseAnim,
+                                accentColor:       theme.accentColor,
+                                isImageBackground: _isImageBackground,
+                                onTap: () {
+                                  if (isListening) {
+                                    notifier.stopListening();
+                                  } else if (!isBusy) {
+                                    notifier.startVoiceTurn();
+                                  }
+                                },
+                              ),
+                              if (state.status == SleepVuiStatus.error &&
+                                  state.errorMessage != null)
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.shade900.withOpacity(0.5),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                          color: Colors.red.shade700.withOpacity(0.5)),
+                                    ),
+                                    child: Text(
+                                      state.errorMessage!,
+                                      style: TextStyle(
+                                          color: Colors.red.shade200, fontSize: 13),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // ── Scroll-to-bottom FAB (shown when controls hidden) ──
+                    AnimatedPositioned(
+                      duration: const Duration(milliseconds: 320),
+                      curve: Curves.easeInOut,
+                      bottom: forceShowControls ? -60 : 24,
+                      right: 20,
+                      child: AnimatedOpacity(
+                        opacity: forceShowControls ? 0.0 : 1.0,
+                        duration: const Duration(milliseconds: 280),
+                        child: IgnorePointer(
+                          ignoring: forceShowControls,
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() => _showControls = true);
+                              _scrollToBottom();
+                            },
+                            child: Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: _isImageBackground
+                                    ? const Color(0xFF3F51B5)
+                                    : theme.accentColor.withOpacity(0.85),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.25),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.keyboard_arrow_up_rounded,
+                                color: Colors.white,
+                                size: 26,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
                   ],
                 ),
               ),
@@ -846,17 +944,19 @@ class _MicSection extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           _MicButton(
-            isListening: isListening,
-            isBusy:      isBusy,
-            pulseAnim:   pulseAnim,
-            accentColor: accentColor,
-            onTap:       onTap,
+            isListening:       isListening,
+            isBusy:            isBusy,
+            pulseAnim:         pulseAnim,
+            accentColor:       accentColor,
+            isImageBackground: false,
+            onTap:             onTap,
           ),
         ],
       ),
     );
   }
 }
+
 // ════════════════════════════════════════════════════════════════
 // 5. MIC BUTTON
 // ════════════════════════════════════════════════════════════════
@@ -866,6 +966,7 @@ class _MicButton extends StatelessWidget {
   final bool              isBusy;
   final Animation<double> pulseAnim;
   final Color             accentColor;
+  final bool              isImageBackground;
   final VoidCallback      onTap;
 
   const _MicButton({
@@ -873,6 +974,7 @@ class _MicButton extends StatelessWidget {
     required this.isBusy,
     required this.pulseAnim,
     required this.accentColor,
+    required this.isImageBackground,
     required this.onTap,
   });
 
@@ -881,13 +983,19 @@ class _MicButton extends StatelessWidget {
     final circle = GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 130, height: 130,
+        width: 160, height: 160,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: isListening
+          color: isImageBackground
+              ? (isListening
+              ? const Color(0xFF3F51B5).withOpacity(0.85)
+              : const Color(0xFF3F51B5))
+              : (isListening
               ? accentColor.withOpacity(0.15)
-              : Colors.white.withOpacity(0.08),
-          border: Border.all(
+              : Colors.white.withOpacity(0.08)),
+          border: isImageBackground
+              ? null
+              : Border.all(
             color: isListening
                 ? accentColor.withOpacity(0.6)
                 : Colors.white.withOpacity(0.15),
@@ -895,14 +1003,18 @@ class _MicButton extends StatelessWidget {
           ),
           boxShadow: isListening
               ? [BoxShadow(
-              color: accentColor.withOpacity(0.25),
-              blurRadius: 28, spreadRadius: 4)]
+              color: (isImageBackground
+                  ? const Color(0xFF3F51B5)
+                  : accentColor).withOpacity(0.30),
+              blurRadius: 32, spreadRadius: 6)]
               : [],
         ),
         child: Icon(
-          isListening ? Icons.stop_rounded : Icons.mic,
-          size: 44,
-          color: isListening ? accentColor : Colors.white.withOpacity(0.85),
+          isListening ? Icons.stop_rounded : Icons.mic_rounded,
+          size: 160 * 0.6,
+          color: isImageBackground
+              ? Colors.white
+              : (isListening ? accentColor : Colors.white.withOpacity(0.85)),
         ),
       ),
     );
@@ -970,9 +1082,7 @@ class _ThinkingPillState extends State<_ThinkingPill>
           return AnimatedBuilder(
             animation: _controller,
             builder: (_, __) {
-              // each dot offset by 0.25 phase
               final phase = ((_controller.value - i * 0.25) % 1.0);
-              // wave: goes up at 0.0, back at 0.5
               final offset = phase < 0.5
                   ? -4.0 * (1 - (phase / 0.5 - 1).abs())
                   : 0.0;
@@ -1035,7 +1145,6 @@ class _ChatBubbleState extends State<_ChatBubble>
       duration: const Duration(milliseconds: 420),
     );
 
-    // Cloth/fabric expand feel — overshoot slightly then settle
     _scale = CurvedAnimation(
       parent: _controller,
       curve: Curves.easeOutBack,
@@ -1048,7 +1157,6 @@ class _ChatBubbleState extends State<_ChatBubble>
       ),
     );
 
-    // Slight delay for assistant bubbles so it feels like a response arriving
     final delay = widget.isUser
         ? Duration.zero
         : const Duration(milliseconds: 60);
@@ -1064,15 +1172,12 @@ class _ChatBubbleState extends State<_ChatBubble>
     super.dispose();
   }
 
-  // ── Sentence splitter ────────────────────────────────────────
   List<String> _splitSentences(String text) {
     final parts = text.split(RegExp(r'(?<=[.!?])\s+(?=[A-Z])'));
     if (parts.length <= 1 || text.length < 80) return [text];
     return parts.where((s) => s.trim().length > 5).toList();
   }
 
-  // ── Step detection ───────────────────────────────────────────
-  // Matches: "1. text", "1) text", "Step 1: text", "Step 1 - text"
   static final _stepPattern = RegExp(
     r'^(?:step\s*)?\d+[.):\-]\s*.+',
     caseSensitive: false,
@@ -1082,17 +1187,13 @@ class _ChatBubbleState extends State<_ChatBubble>
   List<String>? _extractSteps(String text) {
     final lines = text.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
 
-    // At least 2 lines matching step pattern
     final matched = lines.where((l) => _stepPattern.hasMatch(l)).toList();
     if (matched.length >= 2) {
-      // Strip the leading number/prefix so we re-render cleanly
       return lines.map((l) {
         return l.replaceFirst(RegExp(r'^(?:step\s*)?\d+[.):\-]\s*', caseSensitive: false), '').trim();
       }).where((l) => l.isNotEmpty).toList();
     }
 
-    // Also catch comma/semicolon listed steps if Gemini returns them inline
-    // e.g. "1. Dim lights 2. Put phone down 3. Do breathing"
     final inlineSteps = RegExp(r'\d+[.)]\s*([^0-9]+?)(?=\d+[.)]|$)')
         .allMatches(text)
         .map((m) => m.group(1)?.trim() ?? '')
@@ -1103,11 +1204,9 @@ class _ChatBubbleState extends State<_ChatBubble>
     return null;
   }
 
-  // ── Content builder ──────────────────────────────────────────
   Widget _buildContent(TextStyle baseStyle) {
     final text = widget.text;
 
-    // Check for steps first
     final steps = !widget.isUser ? _extractSteps(text) : null;
     if (steps != null) {
       return Column(
@@ -1118,7 +1217,6 @@ class _ChatBubbleState extends State<_ChatBubble>
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Number badge
                 Container(
                   width: 22,
                   height: 22,
@@ -1151,7 +1249,6 @@ class _ChatBubbleState extends State<_ChatBubble>
       );
     }
 
-    // Sentence splitting for long prose
     final sentences = _splitSentences(text);
     if (sentences.length <= 1) return Text(text, style: baseStyle);
 
@@ -1182,8 +1279,6 @@ class _ChatBubbleState extends State<_ChatBubble>
         if (!widget.isUser && widget.isThinking)
           _ThinkingPill(accentColor: widget.theme.accentColor)
         else
-        // Cloth expand animation — grows from top-left for assistant,
-        // top-right for user
           AnimatedBuilder(
             animation: _controller,
             builder: (context, child) => FadeTransition(
