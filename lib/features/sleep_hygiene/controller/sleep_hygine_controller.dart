@@ -678,7 +678,7 @@ class SleepController extends ChangeNotifier {
       if (_context != null && _context!.mounted) {
         Navigator.push(
           _context!,
-          MaterialPageRoute(builder: (_) => EmergencySupportPage(initialCallKey: callKey)),
+          MaterialPageRoute(builder: (_) => const EmergencySupportPage()),
         );
       }
       return;
