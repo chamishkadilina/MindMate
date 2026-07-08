@@ -836,36 +836,55 @@ class SleepController extends ChangeNotifier {
     }
 
     // ── 0. Crisis detection — always first, even during intake ────────────────
-    if (text.contains('kill myself')  ||
-        text.contains('suicide')      ||
-        text.contains('hurt myself')  ||
-        text.contains('end my life')  ||
-        text.contains('crisis')       ||
-        text.contains('emergency')    ||
-        text.contains('self harm')    ||
-        text.contains('cutting myself')     ||
-        text.contains('harming')      ||
-        text.contains('mental issue') ||
-        text.contains('mental health issue') ||
-        text.contains('mental breakdown') ||
-        text.contains('breaking down') ||
-        text.contains('losing my mind') ||
-        text.contains('i am losing it') ||
-        text.contains("i'm losing it")  ||
-        text.contains("don't want to wake up") ||
-        text.contains("dont want to wake up")  ||
-        text.contains("don't want to be here") ||
-        text.contains("dont want to be here")  ||
-        text.contains('want to disappear')     ||
-        text.contains("can't go on")           ||
-        text.contains('want to die')             ||
-        text.contains('better off dead')         ||
-        text.contains('no reason to live')       ||
-        text.contains('give up on life')         ||
-        text.contains('cannot take it anymore')  ||
-        text.contains("can't take it anymore")   ||
-        text.contains('end it all')              ||
-        text.contains('no point living')         ||
+    if (text.contains('kill myself')              ||
+        text.contains('suicide')                  ||
+        text.contains('hurt myself')              ||
+        text.contains('end my life')              ||
+        text.contains('crisis')                   ||
+        text.contains('emergency')                ||
+        text.contains('self harm')                ||
+        text.contains('cutting myself')           ||
+        text.contains('harming')                  ||
+        text.contains('mental issue')             ||
+        text.contains('mental health issue')      ||
+        text.contains('mental breakdown')         ||
+        text.contains('breaking down')            ||
+        text.contains('losing my mind')           ||
+        text.contains('i am losing it')           ||
+        text.contains("i'm losing it")            ||
+        text.contains("don't want to wake up")    ||
+        text.contains("dont want to wake up")     ||
+        text.contains("don't want to be here")    ||
+        text.contains("dont want to be here")     ||
+        text.contains('want to disappear')        ||
+        text.contains("can't go on")              ||
+        text.contains('want to die')              ||
+        text.contains('better off dead')          ||
+        text.contains('no reason to live')        ||
+        text.contains('give up on life')          ||
+        text.contains('cannot take it anymore')   ||
+        text.contains("can't take it anymore")    ||
+        text.contains('end it all')               ||
+        text.contains('no point living')          ||
+        text.contains("don't wanna live")         ||
+        text.contains("dont wanna live")          ||
+        text.contains("do not want to live")      ||
+        text.contains("not want to live anymore") ||
+        text.contains('no reason to be alive')    ||
+        text.contains('life is not worth living') ||
+        text.contains("life isn't worth living")  ||
+        text.contains('wish i was dead')          ||
+        text.contains('wish i were dead')         ||
+        text.contains('tired of living')          ||
+        text.contains('tired of existing')        ||
+        text.contains("done with life")           ||
+        text.contains('rather not exist')         ||
+        text.contains('rather be dead')           ||
+        text.contains('nothing to live for')      ||
+        text.contains('chest pain')               ||
+        text.contains('crushing chest')           ||
+        text.contains('cant breathe at all')      ||
+        text.contains("can't breathe at all")     ||
         text.contains("cant go on")) {
       _consecutiveFallbacks = 0;
       statusLabel = 'Redirecting to Emergency Support…';
@@ -1524,6 +1543,13 @@ class SleepController extends ChangeNotifier {
         text.contains('breathe')            ||
         text.contains('breath exercise')    ||
         text.contains('box breathing')      ||
+        text.contains('panic attack')         ||
+        text.contains('hyperventilating')     ||
+        text.contains('hyperventilate')       ||
+        text.contains('cant catch my breath') ||
+        text.contains("can't catch my breath")||
+        text.contains('heart racing')         ||
+        text.contains('short of breath')      ||
         text.contains('4-7-8')             ||
         text.contains('deep breath')        ||
         text.contains('breathwork')         ||
@@ -1554,6 +1580,14 @@ class SleepController extends ChangeNotifier {
         text.contains('need to calm down') ||
         text.contains('help me relax')     ||
         text.contains('need to unwind')    ||
+        text.contains('spiraling')          ||
+        text.contains('spiralling')         ||
+        text.contains('cant stop thinking') ||
+        text.contains("can't stop thinking") ||
+        text.contains('head is full')       ||
+        text.contains('brain wont shut off')  ||
+        text.contains("brain won't shut off") ||
+        text.contains('overthinking everything') ||
           text.contains('relax my mind')      ||
           text.contains('calm my mind')       ||
           text.contains('clear my head')      ||
@@ -1736,6 +1770,12 @@ class SleepController extends ChangeNotifier {
         text.contains('i feel empty')          ||
         text.contains('feel numb')             ||
         text.contains('not myself')            ||
+        text.contains('feeling emotional')       ||
+        text.contains('cant control my emotions') ||
+        text.contains("can't control my emotions") ||
+        text.contains('rough day')                ||
+        text.contains('rough night')              ||
+        text.contains('emotionally drained')      ||
         _hasWord(text, 'irritable')            ||
         _hasWord(text, 'annoyed')              ||
         _hasWord(text, 'upset')) {
