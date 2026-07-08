@@ -143,7 +143,7 @@ class SleepController extends ChangeNotifier {
       notifyListeners();
       await _handleVoiceCommand(result.toLowerCase());
     } else {
-      print('DEBUG result was empty — skipping _handleVoiceCommand'); // ← add this
+      print('DEBUG result was empty - skipping _handleVoiceCommand'); // ← add this
       notifyListeners();
     }
 
@@ -987,22 +987,6 @@ class SleepController extends ChangeNotifier {
     }
 
 
-    if (text.contains('going to bed')        ||
-        text.contains("i'm going to bed")    ||
-        text.contains('im going to bed')     ||
-        text.contains('i want to sleep now') ||
-        text.contains('ready for bed')       ||
-        text.contains('ready to sleep')      ||
-        text.contains('time for bed')        ||
-        text.contains('help me wind down')   ||
-        text.contains('help me sleep')       ||
-        text.contains('i need to relax')) {
-      _consecutiveFallbacks = 0;
-      await _speak("Starting your bedtime routine now.");
-      await _openWindDownScreen();
-      return;
-    }
-
     // ── 0.5. FAQ keyword-set matching — catches any phrasing of the 5 core questions
     final faqMatch = _matchFaq(text);
     if (faqMatch != null) {
@@ -1315,14 +1299,24 @@ class SleepController extends ChangeNotifier {
         await _navigateTo(pendingNavRoute);
         pendingNavRoute = '';
       } else if (isNo) {
-        _consecutiveFallbacks = 0;
-        currentState    = 'idle';
-        pendingNavRoute = '';
-        notifyListeners();
-        await _speak(
-          "No problem. I'm here whenever you need anything else. "
-              "Just ask me about sleep tips, bedtime routines, or anything related to better sleep.",
-        );
+         _consecutiveFallbacks = 0;
+         final wasSleepPrompt = pendingNavRoute == '/winddown';
+         currentState    = 'idle';
+         pendingNavRoute = '';
+         notifyListeners();
+         if (wasSleepPrompt) {
+         const farewells = [
+              "Great, see you tomorrow!",
+              "No problem - have a good sleep.",
+              "Alright, sweet dreams!",
+         ];
+         await _speak(farewells[DateTime.now().second % farewells.length]);
+         } else {
+           await _speak(
+                 "No problem. I'm here whenever you need anything else. "
+                  "Just ask me about sleep tips, bedtime routines, or anything related to better sleep.",
+          );
+         }
       } else {
         _consecutiveFallbacks = 0;
         await _speak('Just say yes to continue, or no if you prefer to stay here.');
@@ -1493,7 +1487,7 @@ class SleepController extends ChangeNotifier {
       _consecutiveFallbacks = 0;
       final ack  = "Sleep cycles through stages roughly every 90 minutes."; // ← no "Good question"
       final core = "Light sleep is the drift-off phase, deep sleep is when your body repairs itself "
-          "and locks in memories, and REM is when most dreaming happens — key for emotional regulation and learning.";
+          "and locks in memories, and REM is when most dreaming happens - key for emotional regulation and learning.";
       final bridge = _join(core,
           "cutting sleep short hits mood and memory the hardest, since you don't get to cycle through everything.",
           type: 'reason');
@@ -1837,19 +1831,32 @@ class SleepController extends ChangeNotifier {
     // Uses _hasWord() so "what is sleep" or "sleep tips" never matches here.
     // Also guarded by NOT _isQuestion() as a secondary safety net.
     if (!_isQuestion(text) &&
-        (_hasWord(text, 'tired')         ||
-            _hasWord(text, 'sleepy')        ||
-            _hasWord(text, 'drowsy')        ||
-            _hasWord(text, 'exhausted')     ||
-            text.contains('need to sleep'))) {
+        (_hasWord(text, 'tired')            ||
+            _hasWord(text, 'sleepy')           ||
+            _hasWord(text, 'drowsy')           ||
+            _hasWord(text, 'exhausted')        ||
+            text.contains('need to sleep')     ||
+            text.contains('want to sleep')     ||
+            text.contains('going to bed')      ||
+            text.contains("i'm going to bed")  ||
+            text.contains('im going to bed')   ||
+            text.contains('want to go to bed') ||
+            text.contains('need to go to bed') ||
+            text.contains('ready for bed')     ||
+            text.contains('ready to sleep')    ||
+            text.contains('time for bed')      ||
+            text.contains('help me wind down') ||
+            text.contains('help me sleep')     ||
+            text.contains('i need to relax'))) {
 
       _consecutiveFallbacks = 0;
-      final prefix = _contextPrefix();
-      final ack  = "Sounds like your body's ready for rest.";
-      final core = "Head to bed now - phone down, lights dim, and give yourself permission to sleep.";
-      await _speak('$prefix$ack $core');
+      currentState    = 'awaiting_nav_confirmation';
+      pendingNavRoute = '/winddown';
+      notifyListeners();
+      await _speak(
+        "Good - would you like me to open a bedtime routine session for you?",
+      );
       return;
-
     }
 
     // ── 7. TOPIC intents ───────────────────────────────────────────────────
@@ -2005,7 +2012,7 @@ class SleepController extends ChangeNotifier {
         text.contains('am i getting better')) {
       _consecutiveFallbacks = 0;
       await _speak(
-        "Sure — here's your sleep progress chart. "
+        "Sure - here's your sleep progress chart. "
             "It shows your quality ratings over the last 14 nights "
             "plus a trend line so you can see how things are moving.",
       );
