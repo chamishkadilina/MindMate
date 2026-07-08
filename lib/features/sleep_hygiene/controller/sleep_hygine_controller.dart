@@ -836,6 +836,41 @@ class SleepController extends ChangeNotifier {
     }
 
     // ── 0. Crisis detection — always first, even during intake ────────────────
+
+    // 0.05 Direct navigation command
+    if (text.contains('go to emergency') ||
+        text.contains('open emergency')  ||
+        text.contains('take me to emergency') ||
+        text.contains('emergency support') ||
+        text.contains('emergency page')) {
+      _consecutiveFallbacks = 0;
+      await _speak('Opening Emergency Support now.');
+      if (_context != null && _context!.mounted) {
+        Navigator.push(_context!, MaterialPageRoute(builder: (_) => const EmergencySupportPage()));
+      }
+      return;
+    }
+
+    // 0.06 Physical/medical emergency phrasing
+    if (text.contains('cant breathe at all')  ||
+        text.contains("can't breathe at all") ||
+        text.contains('chest pain')           ||
+        text.contains('crushing chest')       ||
+        text.contains('having a heart attack')) {
+      _consecutiveFallbacks = 0;
+      const msg = 'This sounds like it could be a medical emergency. '
+          'Please call emergency services or your local emergency number right away. '
+          'I am also opening our emergency support page for you.';
+      await _speak(msg);
+      if (_context != null && _context!.mounted) {
+        Navigator.push(
+          _context!,
+          MaterialPageRoute(builder: (_) => const EmergencySupportPage()),
+        );
+      }
+      return;
+    }
+
     if (text.contains('kill myself')              ||
         text.contains('suicide')                  ||
         text.contains('hurt myself')              ||
