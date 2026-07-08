@@ -862,6 +862,14 @@ class SleepController extends ChangeNotifier {
         text.contains('better off dead')          ||
         text.contains('no reason to live')        ||
         text.contains('give up on life')          ||
+        text.contains("don't want to live")       ||
+        text.contains("dont want to live")        ||
+        text.contains("don't need to wake up")    ||
+        text.contains("dont need to wake up")     ||
+        text.contains("wish i wouldn't wake up")  ||
+        text.contains("wish i wouldnt wake up")   ||
+        text.contains('hope i dont wake up')      ||
+        text.contains("hope i don't wake up")     ||
         text.contains('cannot take it anymore')   ||
         text.contains("can't take it anymore")    ||
         text.contains('end it all')               ||
