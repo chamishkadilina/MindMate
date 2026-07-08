@@ -219,6 +219,10 @@ class _SleepVuiScreenState extends State<SleepVuiScreen>
                               && !message.isUser
                               && _controller.awaitingQualityRating;
 
+                          final showNavConfirmPills = isLast
+                              && !message.isUser
+                              && _controller.currentState == 'awaiting_nav_confirmation';
+
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
@@ -275,6 +279,42 @@ class _SleepVuiScreenState extends State<SleepVuiScreen>
                                         ),
                                       );
                                     }),
+                                  ),
+                                ),
+
+                              if (showNavConfirmPills)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 36, right: 0, bottom: 20),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.start,
+                                    children: [
+                                      GestureDetector(
+                                        onTap: () => _controller.sendTextCommand('Yes', 'yes'),
+                                        child: Container(
+                                          margin: const EdgeInsets.only(right: 12),
+                                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                          decoration: BoxDecoration(
+                                            color: _accent,
+                                            borderRadius: BorderRadius.circular(20),
+                                          ),
+                                          child: const Text('Yes',
+                                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                        ),
+                                      ),
+                                      GestureDetector(
+                                        onTap: () => _controller.sendTextCommand('No', 'no'),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(20),
+                                            border: Border.all(color: _accent.withValues(alpha: 0.3)),
+                                          ),
+                                          child: const Text('No',
+                                              style: TextStyle(color: _accent, fontWeight: FontWeight.bold)),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                             ],
